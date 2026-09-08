@@ -1,0 +1,13 @@
+@echo off
+rem Copy this file to server.local.bat and edit the paths/settings.
+rem server.local.bat is ignored and must never be committed with passwords.
+
+set "VALHEIM_INSTALL_DIR=C:\Program Files (x86)\Steam\steamapps\common\Valheim"
+set "VALHEIM_SERVER_DIR=C:\ValheimServer"
+set "VALHEIM_SERVER_EXE=%VALHEIM_SERVER_DIR%\valheim_server.exe"
+
+rem The server command-line arguments are passed exactly as written.
+set "VALHEIM_SERVER_ARGS=-nographics -batchmode -name MyServer -port 2456 -world Dedicated -password CHANGE_ME -public 0"
+
+rem Optional: set to 1 to copy the BepInEx bootstrap files into the server root.
+set "INSTALL_BEPINEX_BOOTSTRAP=1"

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HolmgangDuelMod</AssemblyName>
+    <RootNamespace>Catosaurluna.HolmgangDuelMod</RootNamespace>
+    <DefineConstants>$(DefineConstants);HOLMGANG_SCAFFOLD</DefineConstants>
+    <ValheimInstall Condition="'$(ValheimInstall)' == ''">$(VALHEIM_INSTALL)</ValheimInstall>
+    <ValheimManaged Condition="'$(ValheimManaged)' == ''">$(ValheimInstall)\valheim_Data\Managed</ValheimManaged>
+    <BepInExCore Condition="'$(BepInExCore)' == ''">$(ValheimInstall)\BepInEx\core</BepInExCore>
+    <JotunnAssembly Condition="'$(JotunnAssembly)' == ''">$(MSBuildThisFileDirectory)..\..\.deps\Jotunn-2.29.2\plugins\Jotunn.dll</JotunnAssembly>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HolmgangDuelMod.Core\HolmgangDuelMod.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Runtime references are opt-in and require a local Valheim installation. -->
+  <ItemGroup Condition="Exists('$(ValheimManaged)\assembly_valheim.dll') and Exists('$(BepInExCore)\BepInEx.dll') and Exists('$(JotunnAssembly)')">
+    <Reference Include="assembly_valheim" HintPath="$(ValheimManaged)\assembly_valheim.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="$(ValheimManaged)\UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(ValheimManaged)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="BepInEx" HintPath="$(BepInExCore)\BepInEx.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(BepInExCore)\0Harmony.dll" Private="false" />
+    <Reference Include="Jotunn" HintPath="$(JotunnAssembly)" Private="false" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="Exists('$(ValheimManaged)\assembly_valheim.dll') and Exists('$(BepInExCore)\BepInEx.dll') and Exists('$(JotunnAssembly)')">
+    <DefineConstants>$(DefineConstants);VALHEIM_RUNTIME</DefineConstants>
+  </PropertyGroup>
+</Project>

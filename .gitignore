@@ -1,0 +1,134 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+artifacts/
+Packages/
+*.dll
+*.pdb
+*.mdb
+*.exe
+*.zip
+*.nupkg
+*.snupkg
+
+# Keep project/placeholder metadata trackable if needed
+!Directory.Build.*
+!*.csproj
+!*.sln
+
+# Local dependency cache and downloaded modding packages
+.deps/
+.nuget/
+packages/
+!packages/README.md
+
+# Valheim and BepInEx installations/copies
+BepInEx/
+unstripped_corlib/
+valheim_Data/
+Valheim_Data/
+*_Data/Managed/
+doorstop_config.ini
+winhttp.dll
+doorstop_libs/
+changelog.txt
+
+# Local deployment and mod-loader output
+plugins/
+config/
+patchers/
+cache/
+profiles/
+*.cfg
+*.cfg.bak
+*.log
+*.log.old
+*.json.bak
+
+# Valheim saves, worlds, characters, and local runtime state
+worlds/
+worlds_local/
+characters/
+characters_local/
+*.fwl
+*.db
+*.old
+*.backup
+*.dmp
+
+# Test/runtime recordings and reports containing local player/server data
+TestResults/
+test-results/
+coverage/
+coverage*.xml
+*.trx
+*.game.log
+screenshots/
+captures/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.rsuser
+*.DotSettings.user
+*.csproj.user
+
+# C# and MSBuild intermediate files
+*.cache
+*.obj
+*.binlog
+*.ncb
+*.sdf
+*.tlog
+*.lastcodeanalysissucceeded
+*.FileListAbsolute.txt
+*.AssemblyAttributes.cs
+
+# ReSharper / dotCover
+_ReSharper*/
+*.[Rr]e[Ss]harper
+.dotCover/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Temporary archives and patch files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+secrets/
+
+# Local development overrides
+Environment.props
+Directory.Build.local.props
+Directory.Build.local.targets
+*.local.json
+
+# Local server deployment settings
+scripts/server.local.bat
+
+# Disposable isolated dedicated-server runtime
+TEST_SERVER/server/
