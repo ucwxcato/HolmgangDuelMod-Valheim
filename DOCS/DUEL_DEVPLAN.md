@@ -1,6 +1,6 @@
 ﻿# HolmgangDuelMod â€” Development Plan
 
-> **Status:** Authored design; repository is an empty scaffold. No plugin, runtime, or gameplay behavior is verified yet.
+> **Status:** Implementation in progress; pure-domain tests, runtime build wiring, server-only test authorization, Greydwarf proxy, and temporary visuals are implemented. Live gameplay verification remains outstanding.
 >
 > **Author:** catosaurluna
 >
@@ -31,6 +31,8 @@ two valid nearby players -> mutual /duel commands -> countdown + marker/boundary
 - **Duel-only PvP:** do not rely on a global PvP toggle as the sole rule. Damage is allowed only when the attacker and target are the two active duel participants. Any pre-duel PvP state is restored after cleanup.
 - **Temporary presentation:** the flag and optional ward-like bubble are runtime objects/effects only. They must not create permanent build pieces or world-save entries.
 - **Admin test harness:** provide a disabled-by-default admin-only simulated opponent so one person can test duel lifecycle, countdown, arena exit, and cleanup without a second real player. The simulator is not a networked `Player` entity and cannot validate real player damage attribution.
+- **Creature-backed test opponent:** the admin test harness should use a native `Greydwarf` prefab as the runtime combat proxy for the logical `TestOpponent`. Its normal AI, movement, attacks, health, and death should drive the same duel result paths, while the creature remains temporary and is removed during every cleanup path.
+- **Server-only test authorization:** `EnableAdminTestMode` is a server-side setting. A client-local config value and client-side admin claim must never authorize spawning, damage simulation, or duel results; test commands require a server-authoritative RPC/config gate.
 - **No rewards in MVP:** the mod declares a winner but does not transfer items, currency, experience, trophies, or rankings.
 - **Server/mod requirement:** all participating clients must run a compatible HolmgangDuelMod build; the host/dedicated-server behavior and exact sync strategy are a Phase 0 compatibility gate, not an assumption hidden in implementation.
 
@@ -85,7 +87,7 @@ Admin-only test commands, available only when testing is explicitly enabled:
 /dueltest reset       Force test-state cleanup after a failed development run
 ```
 
-The simulated opponent has a stable fake participant ID, display name, position at the duel center, and configurable health. It has no inventory, AI, body, networked player object, or independent damage source. Test mode must never weaken production validation or create a fake player visible to other clients.
+The logical simulated opponent has a stable fake participant ID and display name. In the preferred runtime harness it is represented by a temporary native Greydwarf combat proxy. The proxy is not a fake player, must not be saved permanently, and must be removed if the duel, world, plugin, or authority ends unexpectedly. A headless/pure simulated participant remains available for unit tests.
 
 ## 4. Architecture and ownership
 
@@ -163,7 +165,7 @@ EnableAdminTestMode = false
 - Commands must be case-insensitive for command keywords and use a safe, unambiguous player resolver for names.
 - If JÃ¶tunn or a required helper is missing/incompatible, the plugin must fail at load with a clear error rather than partially enabling duels.
 - Configuration must be validated at load: positive distances/times, `DefeatHealth > 0`, sane upper bounds, and no negative cooldowns. Invalid values use safe defaults and log the correction.
-- Test mode must require both `EnableAdminTestMode = true` and a verified administrator identity. `dueltest` commands must be rejected for ordinary players and must not be available as a production gameplay path when disabled.
+- Test mode must require both server-authoritative `EnableAdminTestMode = true` and a verified administrator identity. A client-local config value is ignored; `dueltest` commands must be rejected until the server gate authorizes them.
 - The simulated opponent must call the same `DuelManager`, rules, countdown, radius, result, and cleanup paths as a real duel; only the participant/event adapter is simulated.
 - Configuration synchronization for dedicated servers is TBD until Phase 0 identifies whether host-only or client-visible settings are authoritative. Player-facing visuals must use the authorityâ€™s session values.
 
@@ -219,17 +221,22 @@ EnableAdminTestMode = false
 - [x] Add disabled-by-default `EnableAdminTestMode` configuration and an administrator authorization abstraction.
 - [x] Implement `/dueltest start`, `/dueltest damage <hp>`, `/dueltest leave`, `/dueltest cancel`, and `/dueltest reset` in the game-independent command service.
 - [x] Ensure test commands inject domain events through `DuelManager` instead of directly mutating session state.
-- [x] Implement unit tests for legal/illegal transitions, duplicate requests, timeouts, cooldowns, and duplicate end signals; 20 tests pass.
+- [x] Implement unit tests for legal/illegal transitions, duplicate requests, timeouts, cooldowns, duplicate end signals, command services, and runtime coordination; 24 tests pass.
 - [x] Add initial pure-domain tests for countdown gating, horizontal radius checks, reciprocal acceptance, request expiry, cooldown, and idempotent session ending; `dotnet test` passes with 6 tests.
 - [x] **Verify:** 20 pure-domain tests pass; command logic has no direct Unity/game-state mutation. Runtime player-directory and chat-service wiring remain in Phase 2/compatibility work.
 
 ### Phase 2 â€” Runtime duel mechanics
 
-- [ ] Add Valheim adapters for proximity, countdown ticking, health threshold, disconnect/death/world cleanup, and boundary checks.
+- [ ] Complete and runtime-verify Valheim adapters for proximity, countdown ticking, health threshold, disconnect/death/world cleanup, and boundary checks; the local player snapshot adapter and Unity update-loop wiring are implemented below but have not yet passed an in-game smoke test.
+- [x] Add the initial Valheim player-directory adapter using the installed build's `Player.GetAllPlayers()`, local-player identity, position, health, death, and world-name APIs; Release compilation against the dedicated-server assemblies passes. Network authority and live smoke verification remain pending.
+- [x] Implement the game-independent runtime coordinator for countdown activation, health threshold, radius exit, disconnect/death/world-transfer outcomes, and idempotent presentation cleanup; 4 coordinator tests pass.
 - [ ] Run the simulated opponent through the normal countdown, marker/bubble, radius, result, and cleanup paths.
-- [ ] Ensure the simulated opponent is never a visible/networked Valheim `Player` entity and cannot be used as a damage source.
+- [x] Implement the native Greydwarf combat proxy for admin test mode, including prefab lookup, temporary spawn, health/position polling, death detection through the runtime coordinator, and explicit cleanup; live in-game spawn/death verification remains pending.
+- [x] Add a server-authoritative `/dueltest` RPC/config gate that validates the sender identity and server admin list before executing test commands; live network smoke verification remains pending.
+- [ ] Ensure the test opponent is never a visible/networked Valheim `Player` entity and cannot be used as a duel damage source outside the test harness.
 - [ ] Add pair-only combat filtering and preservation/restoration of relevant pre-duel PvP state.
 - [ ] Add temporary flag and optional bubble presentation with guaranteed cleanup.
+- [x] Implement compile-verified temporary center flag/totem and configurable translucent bubble presentation with an owner-controlled cleanup object; live visual smoke verification remains pending.
 - [ ] **Verify:** two-player and three-player runtime matrix passes, including unrelated-player damage isolation and all end paths.
 
 ### Phase 3 â€” Hardening and release packaging

@@ -17,8 +17,10 @@
   <!-- Runtime references are opt-in and require a local Valheim installation. -->
   <ItemGroup Condition="Exists('$(ValheimManaged)\assembly_valheim.dll') and Exists('$(BepInExCore)\BepInEx.dll') and Exists('$(JotunnAssembly)')">
     <Reference Include="assembly_valheim" HintPath="$(ValheimManaged)\assembly_valheim.dll" Private="false" />
+    <Reference Include="assembly_utils" HintPath="$(ValheimManaged)\assembly_utils.dll" Private="false" />
     <Reference Include="UnityEngine" HintPath="$(ValheimManaged)\UnityEngine.dll" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ValheimManaged)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.PhysicsModule" HintPath="$(ValheimManaged)\UnityEngine.PhysicsModule.dll" Private="false" />
     <Reference Include="BepInEx" HintPath="$(BepInExCore)\BepInEx.dll" Private="false" />
     <Reference Include="0Harmony" HintPath="$(BepInExCore)\0Harmony.dll" Private="false" />
     <Reference Include="Jotunn" HintPath="$(JotunnAssembly)" Private="false" />

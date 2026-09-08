@@ -1,6 +1,7 @@
 using Catosaurluna.HolmgangDuelMod.Core.Configuration;
 using Catosaurluna.HolmgangDuelMod.Core.Domain;
 using Catosaurluna.HolmgangDuelMod.Core.Players;
+using Catosaurluna.HolmgangDuelMod.Core.Runtime;
 
 namespace Catosaurluna.HolmgangDuelMod.Core.Commands;
 
@@ -14,6 +15,17 @@ public sealed class SystemDuelClock : IDuelClock
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
 }
 
+public interface ITestModeGate
+{
+    bool IsEnabled { get; }
+}
+
+public sealed class SettingsTestModeGate : ITestModeGate
+{
+    public SettingsTestModeGate(bool isEnabled) => IsEnabled = isEnabled;
+    public bool IsEnabled { get; }
+}
+
 public sealed class DuelCommandService
 {
     private const string TestOpponentIdPrefix = "holmgangduelmod.test:";
@@ -22,6 +34,8 @@ public sealed class DuelCommandService
     private readonly IPlayerDirectory players;
     private readonly IAdminAuthorizer adminAuthorizer;
     private readonly IDuelClock clock;
+    private readonly ITestCombatantController? testCombatant;
+    private readonly ITestModeGate testModeGate;
     private readonly Dictionary<string, TestSession> testSessions = new(StringComparer.Ordinal);
 
     public DuelCommandService(
@@ -29,13 +43,17 @@ public sealed class DuelCommandService
         DuelSettings settings,
         IPlayerDirectory players,
         IAdminAuthorizer adminAuthorizer,
-        IDuelClock clock)
+        IDuelClock clock,
+        ITestCombatantController? testCombatant = null,
+        ITestModeGate? testModeGate = null)
     {
         this.manager = manager;
         this.settings = settings;
         this.players = players;
         this.adminAuthorizer = adminAuthorizer;
         this.clock = clock;
+        this.testCombatant = testCombatant;
+        this.testModeGate = testModeGate ?? new SettingsTestModeGate(settings.EnableAdminTestMode);
     }
 
     public string Handle(string callerId, ParsedDuelCommand command)
@@ -124,7 +142,7 @@ public sealed class DuelCommandService
 
     private string HandleTest(PlayerSnapshot caller, ParsedDuelCommand command)
     {
-        if (!settings.EnableAdminTestMode || !adminAuthorizer.IsAdministrator(caller.StableId))
+        if (!testModeGate.IsEnabled || !adminAuthorizer.IsAdministrator(caller.StableId))
             return "Admin duel test mode is disabled or you are not an administrator.";
 
         return command.Kind switch
@@ -151,12 +169,19 @@ public sealed class DuelCommandService
             return "Could not start the simulated duel.";
 
         testSessions[caller.StableId] = new TestSession(session.SessionId, fake.StableId, settings.DefeatHealth);
+        if (testCombatant is not null && !testCombatant.TrySpawn(session))
+        {
+            manager.TryEndSession(session.SessionId, DuelResult.Draw(DuelEndReason.InvalidParticipant), now, TimeSpan.Zero);
+            return "Could not spawn the Greydwarf test opponent.";
+        }
         return "Simulated duel started against TestOpponent.";
     }
 
     private string TestDamage(PlayerSnapshot caller, double health)
     {
         if (!testSessions.TryGetValue(caller.StableId, out var test)) return "No simulated duel is active.";
+        if (testCombatant is not null)
+            return "Live test opponent active. Hit the Greydwarf normally; do not use /dueltest damage.";
         test.Health = health;
         if (health <= settings.DefeatHealth && manager.TryGetSession(caller.StableId, out var session) && session is not null)
         {
@@ -172,6 +197,7 @@ public sealed class DuelCommandService
         if (!testSessions.TryGetValue(caller.StableId, out var test)) return "No simulated duel is active.";
         if (manager.TryGetSession(caller.StableId, out var session) && session is not null)
             manager.TryEndSession(session.SessionId, DuelResult.Winner(DuelEndReason.RadiusExit, caller.StableId, test.OpponentId), clock.UtcNow, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds));
+        testCombatant?.Destroy(test.OpponentId);
         testSessions.Remove(caller.StableId);
         return "TestOpponent left the arena. You win.";
     }
@@ -181,9 +207,10 @@ public sealed class DuelCommandService
 
     private string EndTest(PlayerSnapshot caller, string message, DuelEndReason reason)
     {
-        if (!testSessions.TryGetValue(caller.StableId, out _)) return "No simulated duel is active.";
+        if (!testSessions.TryGetValue(caller.StableId, out var test)) return "No simulated duel is active.";
         if (manager.TryGetSession(caller.StableId, out var session) && session is not null)
             manager.TryEndSession(session.SessionId, DuelResult.Draw(reason), clock.UtcNow, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds));
+        testCombatant?.Destroy(test.OpponentId);
         testSessions.Remove(caller.StableId);
         return message;
     }

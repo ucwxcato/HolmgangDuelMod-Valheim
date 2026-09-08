@@ -51,9 +51,12 @@ if ($modCandidates.Count -eq 0) {
     throw "No HolmgangDuelMod.dll was produced under $buildRoot."
 }
 $modBinary = $modCandidates[0]
+$coreBinary = Join-Path $modBinary.Directory.FullName 'HolmgangDuelMod.Core.dll'
+Assert-Path $coreBinary 'HolmgangDuelMod.Core dependency'
 
 New-Item -ItemType Directory -Force -Path $serverPlugins, $modPluginDirectory, $jotunnPluginDirectory | Out-Null
 Copy-Item -LiteralPath $modBinary.FullName -Destination (Join-Path $modPluginDirectory 'HolmgangDuelMod.dll') -Force
+Copy-Item -LiteralPath $coreBinary -Destination (Join-Path $modPluginDirectory 'HolmgangDuelMod.Core.dll') -Force
 
 Write-Host "Deployed $($modBinary.FullName)" -ForegroundColor Green
 Get-ChildItem -LiteralPath $jotunnPlugin -File | ForEach-Object {

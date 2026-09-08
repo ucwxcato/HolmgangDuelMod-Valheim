@@ -132,3 +132,5 @@ scripts/server.local.bat
 
 # Disposable isolated dedicated-server runtime
 TEST_SERVER/server/
+TEST_SERVER/adminlist.txt
+!TEST_SERVER/HolmgangDuelMod.server.cfg

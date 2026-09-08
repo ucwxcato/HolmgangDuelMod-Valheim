@@ -10,7 +10,8 @@ public sealed class PlayerSnapshot
         string worldId,
         DuelPosition position,
         double health,
-        bool isOnline = true)
+        bool isOnline = true,
+        bool isDead = false)
     {
         StableId = stableId;
         DisplayName = displayName;
@@ -18,6 +19,7 @@ public sealed class PlayerSnapshot
         Position = position;
         Health = health;
         IsOnline = isOnline;
+        IsDead = isDead;
     }
 
     public string StableId { get; }
@@ -26,6 +28,7 @@ public sealed class PlayerSnapshot
     public DuelPosition Position { get; set; }
     public double Health { get; set; }
     public bool IsOnline { get; set; }
+    public bool IsDead { get; set; }
 }
 
 public enum PlayerLookupStatus

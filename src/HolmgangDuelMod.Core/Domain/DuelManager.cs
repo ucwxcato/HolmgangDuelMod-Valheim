@@ -95,6 +95,12 @@ public sealed class DuelManager
             return sessionsByParticipant.TryGetValue(participantId, out session);
     }
 
+    public IReadOnlyList<DuelSession> GetSessions()
+    {
+        lock (sync)
+            return sessionsById.Values.ToArray();
+    }
+
     public void Expire(DateTimeOffset now)
     {
         lock (sync)

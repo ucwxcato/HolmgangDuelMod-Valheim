@@ -30,3 +30,5 @@ scripts\DeployAndStartServer.bat
 ```
 
 The script builds Release, deploys HolmgangDuelMod and Jötunn, optionally bootstraps BepInEx, and starts the configured server. Keep passwords only in the ignored `server.local.bat` file.
+
+HolmgangDuelMod is deployed together with `HolmgangDuelMod.Core.dll`, which is a required runtime dependency.

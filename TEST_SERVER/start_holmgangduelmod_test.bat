@@ -32,6 +32,8 @@ if not exist "%ISOLATED_SERVER_DIR%\valheim_server.exe" (
 
 if not exist "%ISOLATED_SERVER_DIR%\BepInEx\plugins" mkdir "%ISOLATED_SERVER_DIR%\BepInEx\plugins"
 if not exist "%ISOLATED_SERVER_DIR%\BepInEx\config" mkdir "%ISOLATED_SERVER_DIR%\BepInEx\config"
+copy /Y "%~dp0adminlist.txt" "%ISOLATED_SERVER_DIR%\BepInEx\config\adminlist.txt" >nul
+if errorlevel 1 goto :admin_copy_failed
 
 REM Start from a clean plugin directory on every launch. The isolated copy is
 REM disposable; no third-party plugin may survive into this test run.
@@ -45,14 +47,21 @@ dotnet build "%REPO_DIR%\HolmgangDuelMod.sln" --configuration Release ^
 if errorlevel 1 goto :build_failed
 
 if not exist "%REPO_DIR%\src\HolmgangDuelMod\bin\Release\netstandard2.1\HolmgangDuelMod.dll" goto :no_mod
+if not exist "%REPO_DIR%\src\HolmgangDuelMod.Core\bin\Release\netstandard2.1\HolmgangDuelMod.Core.dll" goto :no_core
 mkdir "%PLUGIN_DIR%\HolmgangDuelMod" >nul 2>&1
 copy /Y "%REPO_DIR%\src\HolmgangDuelMod\bin\Release\netstandard2.1\HolmgangDuelMod.dll" "%PLUGIN_DIR%\HolmgangDuelMod\HolmgangDuelMod.dll" >nul
+copy /Y "%REPO_DIR%\src\HolmgangDuelMod.Core\bin\Release\netstandard2.1\HolmgangDuelMod.Core.dll" "%PLUGIN_DIR%\HolmgangDuelMod\HolmgangDuelMod.Core.dll" >nul
 mkdir "%PLUGIN_DIR%\Jotunn" >nul 2>&1
 copy /Y "%REPO_DIR%\.deps\Jotunn-2.29.2\plugins\*" "%PLUGIN_DIR%\Jotunn\" >nul
 if errorlevel 1 goto :deploy_failed
 
+REM Enable the admin test harness on the server only. Client-local config does
+REM not authorize this feature and is intentionally never copied from clients.
+copy /Y "%~dp0HolmgangDuelMod.server.cfg" "%ISOLATED_SERVER_DIR%\BepInEx\config\catosaurluna.holmgangduelmod.cfg" >nul
+if errorlevel 1 goto :test_config_copy_failed
+
 REM Fail closed if anything other than the intended two mod assemblies exists.
-powershell.exe -NoProfile -Command "$bad = Get-ChildItem -LiteralPath '%PLUGIN_DIR%' -Filter '*.dll' -File -Recurse | Where-Object { $_.Name -notin @('HolmgangDuelMod.dll','Jotunn.dll') }; if ($bad) { $bad | ForEach-Object { Write-Error ('Unexpected plugin: ' + $_.FullName) }; exit 1 }"
+powershell.exe -NoProfile -Command "$bad = Get-ChildItem -LiteralPath '%PLUGIN_DIR%' -Filter '*.dll' -File -Recurse | Where-Object { $_.Name -notin @('HolmgangDuelMod.dll','HolmgangDuelMod.Core.dll','Jotunn.dll') }; if ($bad) { $bad | ForEach-Object { Write-Error ('Unexpected plugin: ' + $_.FullName) }; exit 1 }"
 if errorlevel 1 goto :outside_mod
 
 set "SteamAppId=892970"
@@ -66,7 +75,7 @@ echo  Connect: 127.0.0.1:%PORT%
 echo  Plugins: HolmgangDuelMod + Jotunn only
 echo  Admins:  %ISOLATED_SERVER_DIR%\BepInEx\config\adminlist.txt
 echo.
-echo  Add your Steam ID64 to adminlist.txt for admin test commands.
+echo  SteamID64 76561198062587799 is configured as an admin.
 echo  Press CTRL+C to stop the server.
 echo ============================================================
 echo.
@@ -108,8 +117,20 @@ exit /b 1
 echo ERROR: HolmgangDuelMod.dll was not produced.
 pause
 exit /b 1
+:no_core
+echo ERROR: HolmgangDuelMod.Core.dll was not produced.
+pause
+exit /b 1
 :deploy_failed
 echo ERROR: Could not deploy the intended plugins.
+pause
+exit /b 1
+:admin_copy_failed
+echo ERROR: Could not install the isolated test server admin list.
+pause
+exit /b 1
+:test_config_copy_failed
+echo ERROR: Could not enable the server-only HolmgangDuelMod test config.
 pause
 exit /b 1
 :outside_mod
