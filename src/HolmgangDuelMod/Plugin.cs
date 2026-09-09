@@ -66,6 +66,22 @@ public sealed class Plugin : BaseUnityPlugin
                     runtimePresentation.HideClientTestPresentation();
                 else
                     runtimePresentation.ShowClientTestPresentation(center, radius);
+            },
+            (command, response) =>
+            {
+                // The response RPC is already proven to reach the requesting
+                // client. Use it as a visual fallback if a presentation RPC is
+                // delayed or blocked by the current runtime/network setup.
+                if (command.Kind != DuelCommandKind.TestStart ||
+                    !response.StartsWith("Simulated duel started", StringComparison.OrdinalIgnoreCase) ||
+                    runtimePresentation is null || settings is null || Player.m_localPlayer is null)
+                    return;
+
+                var position = Player.m_localPlayer.transform.position;
+                runtimePresentation.ShowClientTestPresentation(
+                    new DuelPosition(position.x, position.y, position.z),
+                    settings.DuelRadius,
+                    (int)Math.Ceiling(settings.CountdownSeconds));
             });
         nextRuntimeTick = Time.unscaledTime;
         new DuelCommandRegistration(HandleCommand).Register();
@@ -81,6 +97,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         nextRuntimeTick = Time.unscaledTime + (float)settings.BoundaryCheckIntervalSeconds;
         runtimeCoordinator.Tick(DateTimeOffset.UtcNow);
+        runtimePresentation?.TickClientPresentation();
     }
 
     private string HandleCommand(ParsedDuelCommand command)

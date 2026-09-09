@@ -42,6 +42,7 @@ HolmgangDuelMod is a Valheim BepInEx plugin by `catosaurluna` that provides opt-
 - The launcher uses `TEST_SERVER\server\saves` through Valheim's `-savedir` argument. The test world is stored under `server\saves\worlds_local\holmgangduelmod_test.*` and must be reused between runs; do not regenerate it for ordinary test cycles.
 - Valheim's authoritative admin-list path is `server\saves\adminlist.txt`, not `server\BepInEx\config\adminlist.txt`. The current `/dueltest` harness does not require admin-list permission, but the server-only `EnableAdminTestMode = true` setting is required and client-local configuration cannot enable it.
 - The server test harness uses a native Greydwarf combat proxy and server-to-client presentation RPCs for the temporary duel flag/bubble. The server remains authoritative for lifecycle, outcomes, cleanup, and test-mode enablement.
+- The 2026-09-09 Greydwarf-spawn de-duplication and client-response visual/countdown fallback are **untested in a live Valheim session**. Before changing test-server/world setup again, run one `/dueltest start` from the r2modman profile and verify: one `Requesting one Greydwarf test proxy` server-log line; exactly one Greydwarf; visible flag and bubble; chat countdown from 10 to 0; then `/dueltest cancel` removes every temporary object. Do not claim this verified until those observations are recorded.
 - If runtime failures occur, inspect `TEST_SERVER\server\BepInEx\LogOutput.log` and preserve the existing isolated world before changing save paths or deleting generated data.
 
 ## Repository hygiene

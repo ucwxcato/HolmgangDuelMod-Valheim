@@ -1,6 +1,6 @@
 ﻿# HolmgangDuelMod â€” Development Plan
 
-> **Status:** Implementation in progress; pure-domain tests, runtime build wiring, server-only test authorization, Greydwarf proxy, and temporary visuals are implemented. Live gameplay verification remains outstanding.
+> **Status:** Implementation in progress; pure-domain tests, runtime build wiring, server-only test authorization, Greydwarf proxy, and temporary visuals are authored. Live gameplay verification remains outstanding.
 >
 > **Author:** catosaurluna
 >
@@ -227,6 +227,10 @@ EnableAdminTestMode = false
 - [x] **Verify:** 20 pure-domain tests pass; command logic has no direct Unity/game-state mutation. Runtime player-directory and chat-service wiring remain in Phase 2/compatibility work.
 
 ### Phase 2 â€” Runtime duel mechanics
+
+> **Current untested runtime regression fix (2026-09-09):** the Greydwarf proxy spawn is now idempotent while its native network object is registering, and the requesting client starts its local temporary flag/bubble and chat countdown from the confirmed command-response path as a fallback to the presentation RPC. This has compile/test evidence only; it is not live-verified.
+
+> **Next required smoke test:** with the isolated server and the r2modman `HolmgangDuelMod` profile running the same build, execute `/dueltest start` once. Confirm exactly one Greydwarf appears, a flag/bubble appear at the player, chat counts down from 10 to 0, and the server log contains one `Requesting one Greydwarf test proxy` line. Then execute `/dueltest cancel` and confirm the creature, flag, and bubble are removed. No PvP behavior is verified by this test; pair-only combat remains unimplemented, and no PvP override may activate before countdown reaches zero.
 
 - [ ] Complete and runtime-verify Valheim adapters for proximity, countdown ticking, health threshold, disconnect/death/world cleanup, and boundary checks; the local player snapshot adapter and Unity update-loop wiring are implemented below but have not yet passed an in-game smoke test.
 - [x] Add the initial Valheim player-directory adapter using the installed build's `Player.GetAllPlayers()`, local-player identity, position, health, death, and world-name APIs; Release compilation against the dedicated-server assemblies passes. Network authority and live smoke verification remain pending.

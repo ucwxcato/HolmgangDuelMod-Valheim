@@ -20,9 +20,14 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
         if (spawned.TryGetValue(session.Second.StableId, out var existing))
         {
             if (existing)
-                return false;
+                return true;
             spawned.Remove(session.Second.StableId);
         }
+
+        // Native ZDO registration is asynchronous. Treat an in-flight request
+        // as the same spawn, rather than issuing a second SpawnObject call.
+        if (pendingSpawns.ContainsKey(session.Second.StableId))
+            return true;
 
         if (ZNetScene.instance is null || ZNet.instance is null || !ZNet.instance.IsServer())
             return false;
@@ -33,6 +38,7 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
 
         var position = new Vector3((float)session.Center.X + 2f, (float)session.Center.Y, (float)session.Center.Z);
         var attempt = new SpawnAttempt(position, ZNetScene.instance.GetPrefabHash(prefab), CaptureExistingGreydwarfs(ZNetScene.instance.GetPrefabHash(prefab)));
+        Debug.Log($"[HolmgangDuelMod] Requesting one Greydwarf test proxy for {session.SessionId} at {position}.");
         ZNetScene.instance.SpawnObject(position, Quaternion.identity, prefab);
         pendingSpawns[session.Second.StableId] = attempt;
 
@@ -51,10 +57,30 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
             TryFindSpawnedGreydwarf(attempt, out instance))
         {
             spawned[stableId] = instance;
+            Debug.Log($"[HolmgangDuelMod] Greydwarf test proxy registered for {stableId}.");
         }
 
         if (!spawned.TryGetValue(stableId, out instance) || !instance)
         {
+            // SpawnObject can take until the next ZNetScene update to expose
+            // the instance. Do not cancel the countdown in that short window;
+            // fail closed if registration never completes.
+            if (pendingSpawns.TryGetValue(stableId, out var pending) &&
+                Time.unscaledTime - pending.RequestedAt < 3f)
+            {
+                participant = new PlayerSnapshot(
+                    stableId,
+                    "TestOpponent",
+                    ZNet.instance is null ? "unknown" : ZNet.instance.GetWorldName(),
+                    new DuelPosition(pending.Position.x, pending.Position.y, pending.Position.z),
+                    health: 100d,
+                    isOnline: true,
+                    isDead: false);
+                return true;
+            }
+
+            if (pendingSpawns.Remove(stableId))
+                Debug.LogWarning($"[HolmgangDuelMod] Greydwarf test proxy did not register for {stableId}; cancelling the duel.");
             spawned.Remove(stableId);
             participant = null;
             return false;
@@ -81,6 +107,15 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
 
     public void Destroy(string stableId)
     {
+        // Resolve before dropping pending state so cleanup also catches a ZDO
+        // that appeared in the same tick the duel ended.
+        if ((!spawned.TryGetValue(stableId, out var tracked) || !tracked) &&
+            pendingSpawns.TryGetValue(stableId, out var pending) &&
+            TryFindSpawnedGreydwarf(pending, out tracked))
+        {
+            spawned[stableId] = tracked;
+        }
+
         pendingSpawns.Remove(stableId);
         if (!spawned.Remove(stableId, out var instance) || !instance)
             return;
@@ -195,11 +230,13 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
             Position = position;
             PrefabHash = prefabHash;
             ExistingZdos = existingZdos;
+            RequestedAt = Time.unscaledTime;
         }
 
         public Vector3 Position { get; }
         public int PrefabHash { get; }
         public HashSet<ZDO> ExistingZdos { get; }
+        public float RequestedAt { get; }
     }
 }
 

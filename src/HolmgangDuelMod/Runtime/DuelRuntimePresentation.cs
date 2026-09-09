@@ -14,6 +14,8 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
     private readonly Action<DuelSession, DuelResult>? duelEnded;
     private readonly Dictionary<Guid, Visuals> visuals = new();
     private Guid? clientTestVisualId;
+    private float clientCountdownEndsAt = -1f;
+    private int lastClientCountdownSecond = -1;
 
     public DuelRuntimePresentation(
         DuelSettings settings,
@@ -32,6 +34,8 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
         if (visuals.ContainsKey(session.SessionId)) return;
 
         visuals[session.SessionId] = CreateVisuals(session.SessionId, session.Center, session.Radius);
+        if (Player.m_localPlayer is not null)
+            StartClientCountdown((int)Math.Ceiling(settings.CountdownSeconds));
         countdownStarted?.Invoke(session);
     }
 
@@ -49,14 +53,20 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
         duelEnded?.Invoke(session, result);
     }
 
-    internal void ShowClientTestPresentation(DuelPosition center, double radius)
+    internal void ShowClientTestPresentation(DuelPosition center, double radius, int countdownSeconds = 0)
     {
         if (clientTestVisualId is not null)
+        {
+            if (countdownSeconds > 0)
+                StartClientCountdown(countdownSeconds);
             return;
+        }
 
         var id = Guid.NewGuid();
         visuals[id] = CreateVisuals(id, center, radius);
         clientTestVisualId = id;
+        if (countdownSeconds > 0)
+            StartClientCountdown(countdownSeconds);
     }
 
     internal void HideClientTestPresentation()
@@ -65,8 +75,38 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
             return;
 
         clientTestVisualId = null;
+        clientCountdownEndsAt = -1f;
+        lastClientCountdownSecond = -1;
         if (visuals.Remove(id, out var current))
             current.Destroy();
+    }
+
+    internal void TickClientPresentation()
+    {
+        if (clientCountdownEndsAt < 0f)
+            return;
+
+        var secondsRemaining = Math.Max(0, Mathf.CeilToInt(clientCountdownEndsAt - Time.unscaledTime));
+        if (secondsRemaining == lastClientCountdownSecond)
+            return;
+
+        lastClientCountdownSecond = secondsRemaining;
+        var message = secondsRemaining > 0
+            ? $"Holmgang duel begins in {secondsRemaining}."
+            : "Holmgang duel countdown complete.";
+        if (Chat.instance is not null)
+            Chat.instance.AddString(message);
+        else if (Console.instance is not null)
+            Console.instance.Print(message);
+
+        if (secondsRemaining == 0)
+            clientCountdownEndsAt = -1f;
+    }
+
+    private void StartClientCountdown(int countdownSeconds)
+    {
+        clientCountdownEndsAt = Time.unscaledTime + Math.Max(1, countdownSeconds);
+        lastClientCountdownSecond = -1;
     }
 
     private Visuals CreateVisuals(Guid id, DuelPosition center, double radius)

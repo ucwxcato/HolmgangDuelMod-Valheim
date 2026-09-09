@@ -23,13 +23,17 @@ internal sealed class DuelTestRpcBridge
     private readonly CustomRPC presentationRpc;
     private readonly Func<string, ParsedDuelCommand, string> serverHandler;
     private readonly Action<DuelPosition, double, bool>? clientPresentation;
+    private readonly Action<ParsedDuelCommand, string>? clientResponse;
+    private readonly Queue<ParsedDuelCommand> pendingClientCommands = new();
 
     public DuelTestRpcBridge(
         Func<string, ParsedDuelCommand, string> serverHandler,
-        Action<DuelPosition, double, bool>? clientPresentation = null)
+        Action<DuelPosition, double, bool>? clientPresentation = null,
+        Action<ParsedDuelCommand, string>? clientResponse = null)
     {
         this.serverHandler = serverHandler;
         this.clientPresentation = clientPresentation;
+        this.clientResponse = clientResponse;
         rpc = NetworkManager.Instance.AddRPC(RpcName, ReceiveOnServer, ReceiveOnClient);
         presentationRpc = NetworkManager.Instance.AddRPC(PresentationRpcName, IgnorePresentationOnServer, ReceivePresentationOnClient);
     }
@@ -49,7 +53,12 @@ internal sealed class DuelTestRpcBridge
         }
 
         if (peerIds.Count == 0)
+        {
+            Debug.LogWarning("[HolmgangDuelMod] Could not broadcast duel test presentation: no connected peers.");
             return;
+        }
+
+        Debug.Log($"[HolmgangDuelMod] Broadcasting duel test presentation ({(ended ? "end" : "start")}) to {peerIds.Count} peer(s).");
 
         foreach (var peerId in peerIds)
         {
@@ -76,6 +85,7 @@ internal sealed class DuelTestRpcBridge
         package.Write((int)command.Kind);
         package.Write(command.PlayerName ?? string.Empty);
         package.Write((float)(command.Health ?? -1d));
+        pendingClientCommands.Enqueue(command);
         rpc.SendPackage(GetServerPeerId(), package);
         message = "Test command sent to the dedicated server.";
         return true;
@@ -137,6 +147,10 @@ internal sealed class DuelTestRpcBridge
             Chat.instance.AddString(response);
         else if (Console.instance is not null)
             Console.instance.Print(response);
+        var command = pendingClientCommands.Count > 0
+            ? pendingClientCommands.Dequeue()
+            : new ParsedDuelCommand(DuelCommandKind.Invalid, null, null, null);
+        clientResponse?.Invoke(command, response);
         yield break;
     }
 
@@ -152,6 +166,7 @@ internal sealed class DuelTestRpcBridge
             var kind = package.ReadInt();
             var center = new DuelPosition(package.ReadSingle(), package.ReadSingle(), package.ReadSingle());
             var radius = package.ReadSingle();
+            Debug.Log($"[HolmgangDuelMod] Received duel test presentation ({kind}) from server.");
             clientPresentation?.Invoke(center, radius, kind == 2);
         }
         catch

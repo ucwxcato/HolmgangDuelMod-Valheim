@@ -27,6 +27,21 @@ public sealed class DuelRuntimeCoordinatorTests
     }
 
     [Fact]
+    public void Countdown_presentation_starts_once_before_the_first_validation_tick()
+    {
+        var first = Player("a", "Alice", 0);
+        var second = Player("b", "Bob", 5);
+        var manager = StartSession(first, second, TimeSpan.FromSeconds(10), out _);
+        var presentation = new RecordingPresentation();
+        var coordinator = new DuelRuntimeCoordinator(manager, new DuelSettings(), new SnapshotSource(first, second), presentation);
+
+        coordinator.Tick(Start);
+        coordinator.Tick(Start.AddMilliseconds(100));
+
+        Assert.Equal(1, presentation.Events.Count(item => item == "countdown"));
+    }
+
+    [Fact]
     public void Health_threshold_ends_with_the_other_player_as_winner()
     {
         var first = Player("a", "Alice", 0);
