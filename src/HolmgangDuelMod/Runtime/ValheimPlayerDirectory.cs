@@ -92,18 +92,16 @@ internal sealed class ValheimPlayerDirectory : IPlayerDirectory, IRuntimePartici
 
 internal sealed class ValheimAdminAuthorizer : IAdminAuthorizer
 {
-    private readonly FieldInfo? adminListField = typeof(ZNet).GetField("m_adminList", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-    private readonly MethodInfo? listContainsId = typeof(ZNet).GetMethod("ListContainsId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
     public bool IsAdministrator(string stableId)
     {
-        if (ZNet.instance is null || adminListField is null || listContainsId is null)
+        if (ZNet.instance is null || !ZNet.instance.IsServer() || string.IsNullOrWhiteSpace(stableId))
             return false;
 
         try
         {
-            var adminList = adminListField.GetValue(ZNet.instance);
-            return adminList is not null && listContainsId.Invoke(ZNet.instance, new[] { adminList, stableId }) is true;
+            // Use Valheim's native check so the server applies its own admin
+            // list loading and platform-ID normalization rules.
+            return ZNet.instance.IsAdmin(stableId);
         }
         catch
         {
