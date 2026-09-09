@@ -1,2 +1,2 @@
-# Put your Steam ID64 on its own line in server/BepInEx/config/adminlist.txt
+# Put your Steam ID64 on its own line in server/saves/adminlist.txt
 # before using admin-only HolmgangDuelMod test commands.

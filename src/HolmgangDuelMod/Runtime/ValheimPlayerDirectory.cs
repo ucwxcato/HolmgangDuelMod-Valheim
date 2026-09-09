@@ -67,7 +67,9 @@ internal sealed class ValheimPlayerDirectory : IPlayerDirectory, IRuntimePartici
             if (peerType.GetField("m_server", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer) is true)
                 continue;
 
-            if (peerType.GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer) is not long uid || uid <= 0)
+            var characterId = peerType.GetField("m_characterID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+            var userId = characterId?.GetType().GetProperty("UserID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(characterId);
+            if (userId is not long uid || uid <= 0)
                 continue;
 
             var stableId = uid.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -104,28 +106,8 @@ internal sealed class ValheimAdminAuthorizer : IAdminAuthorizer
             if (ZNet.instance.IsAdmin(stableId))
                 return true;
 
-            // Depending on the Valheim platform/runtime, the connected peer's
-            // m_uid and its character ZDO UserID can be different identity
-            // representations. The duel caller remains keyed by m_uid, but
-            // admin authorization must also check the authenticated peer's
-            // character UserID.
-            if (!long.TryParse(stableId, out var peerUid))
-                return false;
-
-            foreach (var peer in ZNet.instance.GetPeers())
-            {
-                if (peer is null) continue;
-                var peerType = peer.GetType();
-                var uid = peerType.GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
-                if (uid is not long candidateUid || candidateUid != peerUid)
-                    continue;
-
-                var characterId = peerType.GetField("m_characterID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
-                var userId = characterId?.GetType().GetProperty("UserID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(characterId);
-                if (userId is long characterUserId && characterUserId > 0 && ZNet.instance.IsAdmin(characterUserId.ToString(System.Globalization.CultureInfo.InvariantCulture)))
-                    return true;
-            }
-
+            var loadedAdmins = ZNet.instance.GetAdminList();
+            Debug.LogWarning($"[HolmgangDuelMod] Admin check denied for platform ID {stableId}. Loaded admin IDs: {string.Join(",", loadedAdmins ?? new List<string>())}");
             return false;
         }
         catch (Exception exception)

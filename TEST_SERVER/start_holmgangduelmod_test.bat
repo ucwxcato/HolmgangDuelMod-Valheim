@@ -10,6 +10,7 @@ for %%I in ("%REPO_DIR%") do set "REPO_DIR=%%~fI"
 set "BASE_SERVER_INSTALL=C:\PROGRA~2\Steam\steamapps\common\Valheim dedicated server"
 set "ISOLATED_SERVER_DIR=%~dp0server"
 set "PLUGIN_DIR=%ISOLATED_SERVER_DIR%\BepInEx\plugins"
+set "SAVE_DIR=%ISOLATED_SERVER_DIR%\saves"
 set "PORT=2463"
 set "WORLD=holmgangduelmod_test"
 set "PASSWORD=696970"
@@ -32,7 +33,8 @@ if not exist "%ISOLATED_SERVER_DIR%\valheim_server.exe" (
 
 if not exist "%ISOLATED_SERVER_DIR%\BepInEx\plugins" mkdir "%ISOLATED_SERVER_DIR%\BepInEx\plugins"
 if not exist "%ISOLATED_SERVER_DIR%\BepInEx\config" mkdir "%ISOLATED_SERVER_DIR%\BepInEx\config"
-copy /Y "%~dp0adminlist.txt" "%ISOLATED_SERVER_DIR%\BepInEx\config\adminlist.txt" >nul
+if not exist "%SAVE_DIR%" mkdir "%SAVE_DIR%"
+copy /Y "%~dp0adminlist.txt" "%SAVE_DIR%\adminlist.txt" >nul
 if errorlevel 1 goto :admin_copy_failed
 
 REM Start from a clean plugin directory on every launch. The isolated copy is
@@ -73,7 +75,8 @@ echo  Server:  %ISOLATED_SERVER_DIR%
 echo  World:   %WORLD%
 echo  Connect: 127.0.0.1:%PORT%
 echo  Plugins: HolmgangDuelMod + Jotunn only
-echo  Admins:  %ISOLATED_SERVER_DIR%\BepInEx\config\adminlist.txt
+echo  Saves:   %SAVE_DIR%
+echo  Admins:  %SAVE_DIR%\adminlist.txt
 echo.
 echo  SteamID64 76561198062587799 is configured as an admin.
 echo  Press CTRL+C to stop the server.
@@ -86,6 +89,7 @@ cd /d "%ISOLATED_SERVER_DIR%"
     -port %PORT% ^
     -world "%WORLD%" ^
     -password "%PASSWORD%" ^
+    -savedir "%SAVE_DIR%" ^
     -public 0
 goto :eof
 

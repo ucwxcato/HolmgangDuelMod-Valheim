@@ -68,9 +68,9 @@ internal sealed class DuelTestRpcBridge
 
         // Resolve the caller from the server's peer table. The RPC sender is a
         // routed-peer ID and is not guaranteed to have the same string format
-        // as Player.GetPlayerID().ToString(). The peer UID is the authenticated
-        // platform identity; ZNetPeer.m_characterID is the character/ZDO owner
-        // and can still be unset or differ while a player is joining.
+        // as Player.GetPlayerID().ToString(). The routed peer UID identifies the
+        // connection; the authenticated platform identity is the UserID stored
+        // in the peer's character ZDOID.
         if (!TryResolveAuthoritativeCaller(sender, out var authoritativeCallerId))
         {
             Debug.LogWarning($"[HolmgangDuelMod] Rejected duel test RPC identity. Sender={sender}, caller={callerId}.");
@@ -125,8 +125,9 @@ internal sealed class DuelTestRpcBridge
                 return false;
 
             var peerType = peer.GetType();
-            var peerUid = peerType.GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
-            if (peerUid is not long uid || uid <= 0)
+            var characterId = peerType.GetField("m_characterID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+            var userId = characterId?.GetType().GetProperty("UserID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(characterId);
+            if (userId is not long uid || uid <= 0)
                 return false;
 
             authoritativeCallerId = uid.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -136,7 +137,7 @@ internal sealed class DuelTestRpcBridge
             // Do not compare against the callerId supplied in the package. It
             // is client-controlled presentation/lookup data and its ToString()
             // format is not stable across Valheim identity types. Authorization
-            // uses only the authenticated peer UID resolved above.
+            // uses only the authenticated character UserID resolved above.
             return true;
         }
         catch (Exception exception)
