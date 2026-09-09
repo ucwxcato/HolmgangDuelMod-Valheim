@@ -19,7 +19,7 @@ internal sealed class DuelConsoleCommand : ConsoleCommand
     public override string Name => commandName;
     public override string Help => commandName == "duel"
         ? "Request or manage a HolmgangDuelMod duel."
-        : "HolmgangDuelMod administrator test commands.";
+        : "HolmgangDuelMod server test commands.";
     public override bool IsNetwork => true;
 
     public override void Run(string[] args, Terminal context)

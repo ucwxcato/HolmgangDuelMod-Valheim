@@ -56,7 +56,7 @@ public sealed class Plugin : BaseUnityPlugin
         new DuelCommandRegistration(HandleCommand).Register();
 
         Logger.LogInfo($"{PluginMetadata.Name} {PluginMetadata.Version} loaded.");
-        Logger.LogInfo($"Duel radius: {settings.DuelRadius}; countdown: {settings.CountdownSeconds}s; admin test mode: {settings.EnableAdminTestMode}.");
+        Logger.LogInfo($"Duel radius: {settings.DuelRadius}; countdown: {settings.CountdownSeconds}s; server test mode: {settings.EnableAdminTestMode}.");
     }
 
     private void Update()

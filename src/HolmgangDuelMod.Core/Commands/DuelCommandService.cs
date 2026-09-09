@@ -32,7 +32,6 @@ public sealed class DuelCommandService
     private readonly DuelManager manager;
     private readonly DuelSettings settings;
     private readonly IPlayerDirectory players;
-    private readonly IAdminAuthorizer adminAuthorizer;
     private readonly IDuelClock clock;
     private readonly ITestCombatantController? testCombatant;
     private readonly ITestModeGate testModeGate;
@@ -50,7 +49,6 @@ public sealed class DuelCommandService
         this.manager = manager;
         this.settings = settings;
         this.players = players;
-        this.adminAuthorizer = adminAuthorizer;
         this.clock = clock;
         this.testCombatant = testCombatant;
         this.testModeGate = testModeGate ?? new SettingsTestModeGate(settings.EnableAdminTestMode);
@@ -142,8 +140,8 @@ public sealed class DuelCommandService
 
     private string HandleTest(PlayerSnapshot caller, ParsedDuelCommand command)
     {
-        if (!testModeGate.IsEnabled || !adminAuthorizer.IsAdministrator(caller.StableId))
-            return "Admin duel test mode is disabled or you are not an administrator.";
+        if (!testModeGate.IsEnabled)
+            return "Server duel test mode is disabled.";
 
         return command.Kind switch
         {

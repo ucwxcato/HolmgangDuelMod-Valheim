@@ -10,9 +10,9 @@ using Catosaurluna.HolmgangDuelMod.Core.Players;
 namespace Catosaurluna.HolmgangDuelMod.Runtime;
 
 /// <summary>
-/// Transports administrator test commands to the dedicated server. The server
-/// re-validates the sender, administrator list, and server-only config before it
-/// invokes the duel service.
+/// Transports server test commands to the dedicated server. The server
+/// re-validates the sender and server-only config before it invokes the duel
+/// service.
 /// </summary>
 internal sealed class DuelTestRpcBridge
 {

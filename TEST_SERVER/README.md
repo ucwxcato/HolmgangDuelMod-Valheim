@@ -17,7 +17,7 @@ The launcher refuses to start if another plugin DLL is detected.
 3. Wait for the clean copy to be created and the server to finish starting.
 4. Connect from a clean client profile to `127.0.0.1:2463`.
 5. The configured admin list already includes SteamID64 `76561198062587799`; the launcher copies it into the isolated Valheim save directory as `server\saves\adminlist.txt` on every start.
-6. The launcher also enables the server-only admin test harness in `server\BepInEx\config\catosaurluna.holmgangduelmod.cfg`; a client-local config cannot enable it.
+6. The launcher also enables the server-only test harness in `server\BepInEx\config\catosaurluna.holmgangduelmod.cfg`; a client-local config cannot enable it. Admin-list permission is not required while this explicit test mode is enabled.
 
 The test world is `holmgangduelmod_test`, the local password is `696970`, and the server is not publicly listed.
 

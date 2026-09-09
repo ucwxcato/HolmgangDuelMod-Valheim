@@ -57,7 +57,7 @@ internal sealed class PluginConfiguration
             config.Bind("Duel", "EnableFlag", true, "Show the temporary duel flag."),
             config.Bind("Duel", "EnableBubble", true, "Show the temporary ward-like duel boundary."),
             config.Bind("Duel", "AllowDuelWhileGlobalPvpEnabled", true, "Allow duel rules when global PvP is already enabled."),
-            config.Bind("Testing", "EnableAdminTestMode", false, "SERVER-ONLY: authorize admin-only test commands. Client-local values are ignored."));
+            config.Bind("Testing", "EnableAdminTestMode", false, "SERVER-ONLY: enable duel test commands. Client-local values are ignored."));
     }
 
     public DuelSettings ReadValidated(out IReadOnlyList<string> corrections)

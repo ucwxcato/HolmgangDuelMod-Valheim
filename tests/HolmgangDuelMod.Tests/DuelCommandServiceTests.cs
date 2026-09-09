@@ -47,13 +47,13 @@ public sealed class DuelCommandServiceTests
     }
 
     [Fact]
-    public void Non_admin_cannot_use_test_commands()
+    public void Connected_player_can_use_test_commands_when_server_mode_is_enabled()
     {
         var service = Service(Player("a", "Alice", 0), adminMode: true, isAdmin: false);
 
         var response = service.Handle("a", new ParsedDuelCommand(DuelCommandKind.TestStart));
 
-        Assert.Contains("disabled", response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("started", response, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

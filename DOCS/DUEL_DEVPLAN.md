@@ -30,7 +30,7 @@ two valid nearby players -> mutual /duel commands -> countdown + marker/boundary
 - **Defeat threshold defaults to 1 HP:** reaching `DefeatHealth` or less ends the duel; the implementation must prevent ordinary death cleanup from producing a second result.
 - **Duel-only PvP:** do not rely on a global PvP toggle as the sole rule. Damage is allowed only when the attacker and target are the two active duel participants. Any pre-duel PvP state is restored after cleanup.
 - **Temporary presentation:** the flag and optional ward-like bubble are runtime objects/effects only. They must not create permanent build pieces or world-save entries.
-- **Admin test harness:** provide a disabled-by-default admin-only simulated opponent so one person can test duel lifecycle, countdown, arena exit, and cleanup without a second real player. The simulator is not a networked `Player` entity and cannot validate real player damage attribution.
+- **Server test harness:** provide a disabled-by-default server-only simulated opponent so one person can test duel lifecycle, countdown, arena exit, and cleanup without a second real player. When explicitly enabled on the test server, the harness does not require a separate admin-list permission; it is never enabled by a client-local config value.
 - **Creature-backed test opponent:** the admin test harness should use a native `Greydwarf` prefab as the runtime combat proxy for the logical `TestOpponent`. Its normal AI, movement, attacks, health, and death should drive the same duel result paths, while the creature remains temporary and is removed during every cleanup path.
 - **Server-only test authorization:** `EnableAdminTestMode` is a server-side setting. A client-local config value and client-side admin claim must never authorize spawning, damage simulation, or duel results; test commands require a server-authoritative RPC/config gate.
 - **No rewards in MVP:** the mod declares a winner but does not transfer items, currency, experience, trophies, or rankings.
@@ -161,11 +161,11 @@ AllowDuelWhileGlobalPvpEnabled = true
 EnableAdminTestMode = false
 ```
 
-- Default permission is ordinary player access; optional admin bypass/debug commands must be separately gated and disabled by default.
+- Default permission is ordinary player access; the test harness is separately gated by server-only configuration and disabled by default.
 - Commands must be case-insensitive for command keywords and use a safe, unambiguous player resolver for names.
 - If JÃ¶tunn or a required helper is missing/incompatible, the plugin must fail at load with a clear error rather than partially enabling duels.
 - Configuration must be validated at load: positive distances/times, `DefeatHealth > 0`, sane upper bounds, and no negative cooldowns. Invalid values use safe defaults and log the correction.
-- Test mode must require both server-authoritative `EnableAdminTestMode = true` and a verified administrator identity. A client-local config value is ignored; `dueltest` commands must be rejected until the server gate authorizes them.
+- Test mode must require server-authoritative `EnableAdminTestMode = true`. A client-local config value is ignored; `dueltest` commands must be rejected until the server gate authorizes them.
 - The simulated opponent must call the same `DuelManager`, rules, countdown, radius, result, and cleanup paths as a real duel; only the participant/event adapter is simulated.
 - Configuration synchronization for dedicated servers is TBD until Phase 0 identifies whether host-only or client-visible settings are authoritative. Player-facing visuals must use the authorityâ€™s session values.
 

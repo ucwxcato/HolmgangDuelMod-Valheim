@@ -57,7 +57,7 @@ mkdir "%PLUGIN_DIR%\Jotunn" >nul 2>&1
 copy /Y "%REPO_DIR%\.deps\Jotunn-2.29.2\plugins\*" "%PLUGIN_DIR%\Jotunn\" >nul
 if errorlevel 1 goto :deploy_failed
 
-REM Enable the admin test harness on the server only. Client-local config does
+REM Enable the test harness on the server only. Client-local config does
 REM not authorize this feature and is intentionally never copied from clients.
 copy /Y "%~dp0HolmgangDuelMod.server.cfg" "%ISOLATED_SERVER_DIR%\BepInEx\config\catosaurluna.holmgangduelmod.cfg" >nul
 if errorlevel 1 goto :test_config_copy_failed
