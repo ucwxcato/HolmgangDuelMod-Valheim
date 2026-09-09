@@ -68,8 +68,10 @@ internal sealed class DuelTestRpcBridge
 
         // Resolve the caller from the server's peer table. The RPC sender is a
         // routed-peer ID and is not guaranteed to have the same string format
-        // as Player.GetPlayerID().ToString().
-        if (!TryResolveAuthoritativeCaller(sender, callerId, out var authoritativeCallerId))
+        // as Player.GetPlayerID().ToString(). The peer UID is the authenticated
+        // platform identity; ZNetPeer.m_characterID is the character/ZDO owner
+        // and can still be unset or differ while a player is joining.
+        if (!TryResolveAuthoritativeCaller(sender, out var authoritativeCallerId))
         {
             Debug.LogWarning($"[HolmgangDuelMod] Rejected duel test RPC identity. Sender={sender}, caller={callerId}.");
             SendResponse(sender, "Duel test rejected: sender identity mismatch.");
@@ -108,7 +110,7 @@ internal sealed class DuelTestRpcBridge
         rpc.SendPackage(peerId, package);
     }
 
-    private static bool TryResolveAuthoritativeCaller(long sender, string claimedCallerId, out string authoritativeCallerId)
+    private static bool TryResolveAuthoritativeCaller(long sender, out string authoritativeCallerId)
     {
         authoritativeCallerId = string.Empty;
         if (ZNet.instance is null)
@@ -123,23 +125,19 @@ internal sealed class DuelTestRpcBridge
                 return false;
 
             var peerType = peer.GetType();
-            var characterId = peerType.GetField("m_characterID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
-            var userId = characterId?.GetType().GetProperty("UserID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(characterId)
-                ?? characterId?.GetType().GetMethod("GetUserID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(characterId, null);
-            if (userId is null)
+            var peerUid = peerType.GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+            if (peerUid is not long uid || uid <= 0)
                 return false;
 
-            authoritativeCallerId = userId.ToString() ?? string.Empty;
+            authoritativeCallerId = uid.ToString(System.Globalization.CultureInfo.InvariantCulture);
             if (authoritativeCallerId.Length == 0)
                 return false;
 
-            var normalizedClaim = claimedCallerId.StartsWith("Steam_", StringComparison.OrdinalIgnoreCase)
-                ? claimedCallerId[6..]
-                : claimedCallerId;
-            var normalizedAuthority = authoritativeCallerId.StartsWith("Steam_", StringComparison.OrdinalIgnoreCase)
-                ? authoritativeCallerId[6..]
-                : authoritativeCallerId;
-            return normalizedClaim == normalizedAuthority;
+            // Do not compare against the callerId supplied in the package. It
+            // is client-controlled presentation/lookup data and its ToString()
+            // format is not stable across Valheim identity types. Authorization
+            // uses only the authenticated peer UID resolved above.
+            return true;
         }
         catch (Exception exception)
         {
