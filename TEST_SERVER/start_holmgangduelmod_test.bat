@@ -11,6 +11,10 @@ set "BASE_SERVER_INSTALL=C:\PROGRA~2\Steam\steamapps\common\Valheim dedicated se
 set "ISOLATED_SERVER_DIR=%~dp0server"
 set "PLUGIN_DIR=%ISOLATED_SERVER_DIR%\BepInEx\plugins"
 set "SAVE_DIR=%ISOLATED_SERVER_DIR%\saves"
+set "TEST_CLIENT_PROFILE=C:\Users\magni\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\HolmgangDuelMod"
+set "TEST_CLIENT_PLUGIN_DIR=%TEST_CLIENT_PROFILE%\BepInEx\plugins"
+set "TEST_CLIENT_MOD_DIR=%TEST_CLIENT_PLUGIN_DIR%\Unknown-HolmgangDuelMod.dll"
+set "TEST_CLIENT_CORE_DIR=%TEST_CLIENT_PLUGIN_DIR%\Unknown-HolmgangDuelMod.Core.dll"
 set "PORT=2463"
 set "WORLD=holmgangduelmod_test"
 set "PASSWORD=696970"
@@ -50,9 +54,15 @@ if errorlevel 1 goto :build_failed
 
 if not exist "%REPO_DIR%\src\HolmgangDuelMod\bin\Release\netstandard2.1\HolmgangDuelMod.dll" goto :no_mod
 if not exist "%REPO_DIR%\src\HolmgangDuelMod.Core\bin\Release\netstandard2.1\HolmgangDuelMod.Core.dll" goto :no_core
+if not exist "%TEST_CLIENT_PROFILE%" goto :no_test_client
 mkdir "%PLUGIN_DIR%\HolmgangDuelMod" >nul 2>&1
 copy /Y "%REPO_DIR%\src\HolmgangDuelMod\bin\Release\netstandard2.1\HolmgangDuelMod.dll" "%PLUGIN_DIR%\HolmgangDuelMod\HolmgangDuelMod.dll" >nul
 copy /Y "%REPO_DIR%\src\HolmgangDuelMod.Core\bin\Release\netstandard2.1\HolmgangDuelMod.Core.dll" "%PLUGIN_DIR%\HolmgangDuelMod\HolmgangDuelMod.Core.dll" >nul
+mkdir "%TEST_CLIENT_MOD_DIR%" >nul 2>&1
+mkdir "%TEST_CLIENT_CORE_DIR%" >nul 2>&1
+copy /Y "%REPO_DIR%\src\HolmgangDuelMod\bin\Release\netstandard2.1\HolmgangDuelMod.dll" "%TEST_CLIENT_MOD_DIR%\HolmgangDuelMod.dll" >nul
+copy /Y "%REPO_DIR%\src\HolmgangDuelMod.Core\bin\Release\netstandard2.1\HolmgangDuelMod.Core.dll" "%TEST_CLIENT_CORE_DIR%\HolmgangDuelMod.Core.dll" >nul
+if errorlevel 1 goto :client_deploy_failed
 mkdir "%PLUGIN_DIR%\Jotunn" >nul 2>&1
 copy /Y "%REPO_DIR%\.deps\Jotunn-2.29.2\plugins\*" "%PLUGIN_DIR%\Jotunn\" >nul
 if errorlevel 1 goto :deploy_failed
@@ -75,6 +85,7 @@ echo  Server:  %ISOLATED_SERVER_DIR%
 echo  World:   %WORLD%
 echo  Connect: 127.0.0.1:%PORT%
 echo  Plugins: HolmgangDuelMod + Jotunn only
+echo  Client:  %TEST_CLIENT_PROFILE%
 echo  Saves:   %SAVE_DIR%
 echo  Admins:  %SAVE_DIR%\adminlist.txt
 echo.
@@ -123,6 +134,15 @@ pause
 exit /b 1
 :no_core
 echo ERROR: HolmgangDuelMod.Core.dll was not produced.
+pause
+exit /b 1
+:no_test_client
+echo ERROR: r2modman test client profile was not found:
+echo   %TEST_CLIENT_PROFILE%
+pause
+exit /b 1
+:client_deploy_failed
+echo ERROR: Could not deploy HolmgangDuelMod to the r2modman test client profile.
 pause
 exit /b 1
 :deploy_failed

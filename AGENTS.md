@@ -38,6 +38,7 @@ HolmgangDuelMod is a Valheim BepInEx plugin by `catosaurluna` that provides opt-
 ## Local test-server configuration
 
 - Launch the isolated test server with `TEST_SERVER\start_holmgangduelmod_test.bat`.
+- The canonical test client is the r2modman profile at `C:\Users\magni\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\HolmgangDuelMod`. After every successful test-server build, deploy both `HolmgangDuelMod.dll` and `HolmgangDuelMod.Core.dll` into its respective `BepInEx\plugins\Unknown-HolmgangDuelMod*.dll` folders. Do not alter the profile's other mods or its JÃ¶tunn package.
 - The launcher uses `TEST_SERVER\server\saves` through Valheim's `-savedir` argument. The test world is stored under `server\saves\worlds_local\holmgangduelmod_test.*` and must be reused between runs; do not regenerate it for ordinary test cycles.
 - Valheim's authoritative admin-list path is `server\saves\adminlist.txt`, not `server\BepInEx\config\adminlist.txt`. The current `/dueltest` harness does not require admin-list permission, but the server-only `EnableAdminTestMode = true` setting is required and client-local configuration cannot enable it.
 - The server test harness uses a native Greydwarf combat proxy and server-to-client presentation RPCs for the temporary duel flag/bubble. The server remains authoritative for lifecycle, outcomes, cleanup, and test-mode enablement.

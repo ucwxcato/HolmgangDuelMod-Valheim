@@ -11,8 +11,9 @@ namespace Catosaurluna.HolmgangDuelMod.Runtime;
 internal sealed class GreydwarfTestCombatant : ITestCombatantController
 {
     private readonly Dictionary<string, GameObject> spawned = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Vector3> spawnPositions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SpawnAttempt> pendingSpawns = new(StringComparer.Ordinal);
     private static readonly FieldInfo InstancesField = typeof(ZNetScene).GetField("m_instances", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+    private const string TestCombatantMarker = "HolmgangDuelMod.TestCombatant";
 
     public bool TrySpawn(DuelSession session)
     {
@@ -31,10 +32,11 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
             return false;
 
         var position = new Vector3((float)session.Center.X + 2f, (float)session.Center.Y, (float)session.Center.Z);
+        var attempt = new SpawnAttempt(position, ZNetScene.instance.GetPrefabHash(prefab), CaptureExistingGreydwarfs(ZNetScene.instance.GetPrefabHash(prefab)));
         ZNetScene.instance.SpawnObject(position, Quaternion.identity, prefab);
-        spawnPositions[session.Second.StableId] = position;
+        pendingSpawns[session.Second.StableId] = attempt;
 
-        if (TryFindSpawnedGreydwarf(position, out var instance))
+        if (TryFindSpawnedGreydwarf(attempt, out var instance))
             spawned[session.Second.StableId] = instance;
 
         // SpawnObject may register the ZDO during the next scene tick. The
@@ -45,8 +47,8 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
     public bool TryGet(string stableId, out PlayerSnapshot? participant)
     {
         if ((!spawned.TryGetValue(stableId, out var instance) || !instance) &&
-            spawnPositions.TryGetValue(stableId, out var expectedPosition) &&
-            TryFindSpawnedGreydwarf(expectedPosition, out instance))
+            pendingSpawns.TryGetValue(stableId, out var attempt) &&
+            TryFindSpawnedGreydwarf(attempt, out instance))
         {
             spawned[stableId] = instance;
         }
@@ -79,7 +81,7 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
 
     public void Destroy(string stableId)
     {
-        spawnPositions.Remove(stableId);
+        pendingSpawns.Remove(stableId);
         if (!spawned.Remove(stableId, out var instance) || !instance)
             return;
 
@@ -89,7 +91,62 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
             UnityEngine.Object.Destroy(instance);
     }
 
-    private static bool TryFindSpawnedGreydwarf(Vector3 position, out GameObject instance)
+    public void DestroyStaleTestCombatants()
+    {
+        if (ZNetScene.instance is null || InstancesField.GetValue(ZNetScene.instance) is not IDictionary instances)
+            return;
+
+        var stale = new List<GameObject>();
+        foreach (DictionaryEntry entry in instances)
+        {
+            if (entry.Value is not ZNetView view || !view)
+                continue;
+
+            try
+            {
+                if (view.GetZDO().GetBool(TestCombatantMarker, false))
+                    stale.Add(view.gameObject);
+            }
+            catch
+            {
+                // A destroyed network view is already cleaned up.
+            }
+        }
+
+        foreach (var instance in stale)
+        {
+            if (instance)
+                ZNetScene.instance.Destroy(instance);
+        }
+    }
+
+    private static HashSet<ZDO> CaptureExistingGreydwarfs(int prefabHash)
+    {
+        var existing = new HashSet<ZDO>();
+        if (ZNetScene.instance is null || InstancesField.GetValue(ZNetScene.instance) is not IDictionary instances)
+            return existing;
+
+        foreach (DictionaryEntry entry in instances)
+        {
+            if (entry.Value is not ZNetView view || !view)
+                continue;
+
+            try
+            {
+                var zdo = view.GetZDO();
+                if (zdo.GetPrefab() == prefabHash)
+                    existing.Add(zdo);
+            }
+            catch
+            {
+                // A destroyed network view cannot participate in a new spawn.
+            }
+        }
+
+        return existing;
+    }
+
+    private static bool TryFindSpawnedGreydwarf(SpawnAttempt attempt, out GameObject instance)
     {
         instance = null!;
         if (ZNetScene.instance is null || InstancesField.GetValue(ZNetScene.instance) is not IDictionary instances)
@@ -104,10 +161,11 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
             GameObject candidate;
             try
             {
+                var zdo = view.GetZDO();
+                if (zdo.GetPrefab() != attempt.PrefabHash || attempt.ExistingZdos.Contains(zdo))
+                    continue;
                 candidate = view.gameObject;
                 if (!candidate)
-                    continue;
-                if (!candidate.name.StartsWith("Greydwarf", StringComparison.Ordinal))
                     continue;
             }
             catch
@@ -115,18 +173,33 @@ internal sealed class GreydwarfTestCombatant : ITestCombatantController
                 continue;
             }
 
-            var distance = (candidate.transform.position - position).sqrMagnitude;
+            var distance = (candidate.transform.position - attempt.Position).sqrMagnitude;
             if (distance >= nearestDistance)
                 continue;
 
             if (candidate.GetComponent<Character>() is null)
                 continue;
 
+            view.GetZDO().Set(TestCombatantMarker, true);
             nearestDistance = distance;
             instance = candidate;
         }
 
         return instance;
+    }
+
+    private sealed class SpawnAttempt
+    {
+        public SpawnAttempt(Vector3 position, int prefabHash, HashSet<ZDO> existingZdos)
+        {
+            Position = position;
+            PrefabHash = prefabHash;
+            ExistingZdos = existingZdos;
+        }
+
+        public Vector3 Position { get; }
+        public int PrefabHash { get; }
+        public HashSet<ZDO> ExistingZdos { get; }
     }
 }
 

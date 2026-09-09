@@ -10,6 +10,8 @@ The isolated copy excludes the shared server’s BepInEx plugins, configs, cache
 
 The launcher refuses to start if another plugin DLL is detected.
 
+Each launch also updates only `HolmgangDuelMod.dll` and `HolmgangDuelMod.Core.dll` in the `HolmgangDuelMod` r2modman client profile. JÃ¶tunn and all other client-profile mods remain managed by r2modman.
+
 ## First run
 
 1. Confirm the shared server is installed at `C:\Program Files (x86)\Steam\steamapps\common\Valheim dedicated server`.

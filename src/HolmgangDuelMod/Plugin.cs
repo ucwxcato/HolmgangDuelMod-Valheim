@@ -37,6 +37,7 @@ public sealed class Plugin : BaseUnityPlugin
         playerDirectory = new ValheimPlayerDirectory();
         var manager = new DuelManager();
         greydwarfTestCombatant = new GreydwarfTestCombatant();
+        greydwarfTestCombatant.DestroyStaleTestCombatants();
         testModeGate = new ServerAuthoritativeTestModeGate(settings.EnableAdminTestMode);
         commandService = new DuelCommandService(
             manager,
