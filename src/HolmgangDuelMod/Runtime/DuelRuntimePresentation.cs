@@ -10,23 +10,29 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
 {
     private readonly DuelSettings settings;
     private readonly GreydwarfTestCombatant testCombatant;
+    private readonly Action<DuelSession>? countdownStarted;
+    private readonly Action<DuelSession, DuelResult>? duelEnded;
     private readonly Dictionary<Guid, Visuals> visuals = new();
+    private Guid? clientTestVisualId;
 
-    public DuelRuntimePresentation(DuelSettings settings, GreydwarfTestCombatant testCombatant)
+    public DuelRuntimePresentation(
+        DuelSettings settings,
+        GreydwarfTestCombatant testCombatant,
+        Action<DuelSession>? countdownStarted = null,
+        Action<DuelSession, DuelResult>? duelEnded = null)
     {
         this.settings = settings;
         this.testCombatant = testCombatant;
+        this.countdownStarted = countdownStarted;
+        this.duelEnded = duelEnded;
     }
 
     public void CountdownStarted(DuelSession session)
     {
         if (visuals.ContainsKey(session.SessionId)) return;
 
-        var root = new GameObject($"HolmgangDuelMod_Duel_{session.SessionId:N}");
-        var position = ToVector3(session.Center);
-        var flag = settings.EnableFlag ? CreateFlag(root.transform, position) : null;
-        var bubble = settings.EnableBubble ? CreateBubble(root.transform, position, (float)session.Radius) : null;
-        visuals[session.SessionId] = new Visuals(root, flag, bubble);
+        visuals[session.SessionId] = CreateVisuals(session.SessionId, session.Center, session.Radius);
+        countdownStarted?.Invoke(session);
     }
 
     public void DuelStarted(DuelSession session)
@@ -40,6 +46,36 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
             current.Destroy();
         if (session.Second.IsSimulated)
             testCombatant.Destroy(session.Second.StableId);
+        duelEnded?.Invoke(session, result);
+    }
+
+    internal void ShowClientTestPresentation(DuelPosition center, double radius)
+    {
+        if (clientTestVisualId is not null)
+            return;
+
+        var id = Guid.NewGuid();
+        visuals[id] = CreateVisuals(id, center, radius);
+        clientTestVisualId = id;
+    }
+
+    internal void HideClientTestPresentation()
+    {
+        if (clientTestVisualId is not Guid id)
+            return;
+
+        clientTestVisualId = null;
+        if (visuals.Remove(id, out var current))
+            current.Destroy();
+    }
+
+    private Visuals CreateVisuals(Guid id, DuelPosition center, double radius)
+    {
+        var root = new GameObject($"HolmgangDuelMod_Duel_{id:N}");
+        var position = ToVector3(center);
+        var flag = settings.EnableFlag ? CreateFlag(root.transform, position) : null;
+        var bubble = settings.EnableBubble ? CreateBubble(root.transform, position, (float)radius) : null;
+        return new Visuals(root, flag, bubble);
     }
 
     private static GameObject CreateFlag(Transform parent, Vector3 position)

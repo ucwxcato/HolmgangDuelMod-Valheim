@@ -20,6 +20,7 @@ public sealed class Plugin : BaseUnityPlugin
     private ValheimPlayerDirectory? playerDirectory;
     private DuelCommandService? commandService;
     private DuelRuntimeCoordinator? runtimeCoordinator;
+    private DuelRuntimePresentation? runtimePresentation;
     private GreydwarfTestCombatant? greydwarfTestCombatant;
     private DuelTestRpcBridge? duelTestRpc;
     private ServerAuthoritativeTestModeGate? testModeGate;
@@ -45,13 +46,26 @@ public sealed class Plugin : BaseUnityPlugin
             new SystemDuelClock(),
             greydwarfTestCombatant,
             testModeGate);
+        runtimePresentation = new DuelRuntimePresentation(
+            settings,
+            greydwarfTestCombatant,
+            session => duelTestRpc?.BroadcastPresentation(session, ended: false),
+            (session, _) => duelTestRpc?.BroadcastPresentation(session, ended: true));
         runtimeCoordinator = new DuelRuntimeCoordinator(
             manager,
             settings,
             new CompositeRuntimeParticipantSource(playerDirectory, greydwarfTestCombatant),
-            new DuelRuntimePresentation(settings, greydwarfTestCombatant));
+            runtimePresentation);
         duelTestRpc = new DuelTestRpcBridge((callerId, command) =>
-            commandService.Handle(callerId, command));
+            commandService.Handle(callerId, command),
+            (center, radius, ended) =>
+            {
+                if (runtimePresentation is null) return;
+                if (ended)
+                    runtimePresentation.HideClientTestPresentation();
+                else
+                    runtimePresentation.ShowClientTestPresentation(center, radius);
+            });
         nextRuntimeTick = Time.unscaledTime;
         new DuelCommandRegistration(HandleCommand).Register();
 

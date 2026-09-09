@@ -5,6 +5,7 @@ using Jotunn.Entities;
 using Jotunn.Managers;
 using UnityEngine;
 using System.Reflection;
+using Catosaurluna.HolmgangDuelMod.Core.Domain;
 using Catosaurluna.HolmgangDuelMod.Core.Players;
 
 namespace Catosaurluna.HolmgangDuelMod.Runtime;
@@ -17,13 +18,49 @@ namespace Catosaurluna.HolmgangDuelMod.Runtime;
 internal sealed class DuelTestRpcBridge
 {
     private const string RpcName = "HolmgangDuelMod_DuelTest";
+    private const string PresentationRpcName = "HolmgangDuelMod_DuelTestPresentation";
     private readonly CustomRPC rpc;
+    private readonly CustomRPC presentationRpc;
     private readonly Func<string, ParsedDuelCommand, string> serverHandler;
+    private readonly Action<DuelPosition, double, bool>? clientPresentation;
 
-    public DuelTestRpcBridge(Func<string, ParsedDuelCommand, string> serverHandler)
+    public DuelTestRpcBridge(
+        Func<string, ParsedDuelCommand, string> serverHandler,
+        Action<DuelPosition, double, bool>? clientPresentation = null)
     {
         this.serverHandler = serverHandler;
+        this.clientPresentation = clientPresentation;
         rpc = NetworkManager.Instance.AddRPC(RpcName, ReceiveOnServer, ReceiveOnClient);
+        presentationRpc = NetworkManager.Instance.AddRPC(PresentationRpcName, IgnorePresentationOnServer, ReceivePresentationOnClient);
+    }
+
+    public void BroadcastPresentation(DuelSession session, bool ended)
+    {
+        if (ZNet.instance is null || !ZNet.instance.IsServer())
+            return;
+
+        var peerIds = new List<long>();
+        foreach (var peer in ZNet.instance.GetPeers())
+        {
+            if (peer is null) continue;
+            var peerId = peer.GetType().GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+            if (peerId is long id && id > 0)
+                peerIds.Add(id);
+        }
+
+        if (peerIds.Count == 0)
+            return;
+
+        foreach (var peerId in peerIds)
+        {
+            var package = new ZPackage();
+            package.Write(ended ? 2 : 1);
+            package.Write((float)session.Center.X);
+            package.Write((float)session.Center.Y);
+            package.Write((float)session.Center.Z);
+            package.Write((float)session.Radius);
+            presentationRpc.SendPackage(peerId, package);
+        }
     }
 
     public bool TrySend(string callerId, ParsedDuelCommand command, out string message)
@@ -100,6 +137,28 @@ internal sealed class DuelTestRpcBridge
             Chat.instance.AddString(response);
         else if (Console.instance is not null)
             Console.instance.Print(response);
+        yield break;
+    }
+
+    private IEnumerator IgnorePresentationOnServer(long sender, ZPackage package)
+    {
+        yield break;
+    }
+
+    private IEnumerator ReceivePresentationOnClient(long sender, ZPackage package)
+    {
+        try
+        {
+            var kind = package.ReadInt();
+            var center = new DuelPosition(package.ReadSingle(), package.ReadSingle(), package.ReadSingle());
+            var radius = package.ReadSingle();
+            clientPresentation?.Invoke(center, radius, kind == 2);
+        }
+        catch
+        {
+            Debug.LogWarning("[HolmgangDuelMod] Rejected malformed duel test presentation RPC.");
+        }
+
         yield break;
     }
 

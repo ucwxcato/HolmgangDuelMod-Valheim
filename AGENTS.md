@@ -35,6 +35,14 @@ HolmgangDuelMod is a Valheim BepInEx plugin by `catosaurluna` that provides opt-
 - Before declaring a phase complete, run the phaseâ€™s stated verification gate and record the evidence in the plan or a linked test report.
 - Do not add arenas, rankings, spectators, rewards, kits, persistence, or matchmaking to the MVP without an explicit plan revision.
 
+## Local test-server configuration
+
+- Launch the isolated test server with `TEST_SERVER\start_holmgangduelmod_test.bat`.
+- The launcher uses `TEST_SERVER\server\saves` through Valheim's `-savedir` argument. The test world is stored under `server\saves\worlds_local\holmgangduelmod_test.*` and must be reused between runs; do not regenerate it for ordinary test cycles.
+- Valheim's authoritative admin-list path is `server\saves\adminlist.txt`, not `server\BepInEx\config\adminlist.txt`. The current `/dueltest` harness does not require admin-list permission, but the server-only `EnableAdminTestMode = true` setting is required and client-local configuration cannot enable it.
+- The server test harness uses a native Greydwarf combat proxy and server-to-client presentation RPCs for the temporary duel flag/bubble. The server remains authoritative for lifecycle, outcomes, cleanup, and test-mode enablement.
+- If runtime failures occur, inspect `TEST_SERVER\server\BepInEx\LogOutput.log` and preserve the existing isolated world before changing save paths or deleting generated data.
+
 ## Repository hygiene
 
 - Keep generated binaries, local Valheim assemblies, BepInEx installations, logs, and player/world data out of source control.
