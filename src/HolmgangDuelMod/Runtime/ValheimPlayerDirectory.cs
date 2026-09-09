@@ -101,10 +101,36 @@ internal sealed class ValheimAdminAuthorizer : IAdminAuthorizer
         {
             // Use Valheim's native check so the server applies its own admin
             // list loading and platform-ID normalization rules.
-            return ZNet.instance.IsAdmin(stableId);
+            if (ZNet.instance.IsAdmin(stableId))
+                return true;
+
+            // Depending on the Valheim platform/runtime, the connected peer's
+            // m_uid and its character ZDO UserID can be different identity
+            // representations. The duel caller remains keyed by m_uid, but
+            // admin authorization must also check the authenticated peer's
+            // character UserID.
+            if (!long.TryParse(stableId, out var peerUid))
+                return false;
+
+            foreach (var peer in ZNet.instance.GetPeers())
+            {
+                if (peer is null) continue;
+                var peerType = peer.GetType();
+                var uid = peerType.GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+                if (uid is not long candidateUid || candidateUid != peerUid)
+                    continue;
+
+                var characterId = peerType.GetField("m_characterID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+                var userId = characterId?.GetType().GetProperty("UserID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(characterId);
+                if (userId is long characterUserId && characterUserId > 0 && ZNet.instance.IsAdmin(characterUserId.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                    return true;
+            }
+
+            return false;
         }
-        catch
+        catch (Exception exception)
         {
+            Debug.LogWarning($"[HolmgangDuelMod] Admin check failed for {stableId}: {exception.Message}");
             return false;
         }
     }
