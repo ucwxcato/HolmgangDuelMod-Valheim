@@ -1,0 +1,1 @@
+C:\Users\magni\Documents\BotsnCoding\Valheim\HolmgangDuelMod\src\HolmgangDuelMod\bin\Release\netstandard2.1
