@@ -29,6 +29,8 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Awake()
     {
+        new HarmonyLib.Harmony(PluginMetadata.Guid).PatchAll();
+        Logger.LogInfo("Countdown damage gate installed on Character.Damage.");
         configuration = PluginConfiguration.Bind(Config);
         settings = configuration.ReadValidated(out var corrections);
         foreach (var correction in corrections)
@@ -59,13 +61,13 @@ public sealed class Plugin : BaseUnityPlugin
             runtimePresentation);
         duelTestRpc = new DuelTestRpcBridge((callerId, command) =>
             commandService.Handle(callerId, command),
-            (center, radius, ended) =>
+            (center, radius, ended, countdownSeconds) =>
             {
                 if (runtimePresentation is null) return;
                 if (ended)
                     runtimePresentation.HideClientTestPresentation();
                 else
-                    runtimePresentation.ShowClientTestPresentation(center, radius);
+                    runtimePresentation.ShowClientTestPresentation(center, radius, countdownSeconds);
             },
             (command, response) =>
             {
@@ -96,6 +98,7 @@ public sealed class Plugin : BaseUnityPlugin
             return;
 
         nextRuntimeTick = Time.unscaledTime + (float)settings.BoundaryCheckIntervalSeconds;
+        greydwarfTestCombatant?.CleanupPendingSpawns();
         runtimeCoordinator.Tick(DateTimeOffset.UtcNow);
         runtimePresentation?.TickClientPresentation();
     }

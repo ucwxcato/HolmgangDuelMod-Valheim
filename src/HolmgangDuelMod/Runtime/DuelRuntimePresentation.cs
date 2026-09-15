@@ -33,6 +33,9 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
     {
         if (visuals.ContainsKey(session.SessionId)) return;
 
+        if (session.Second.IsSimulated)
+            testCombatant.ProtectCountdown(session.Second.StableId, ToVector3(session.Center));
+
         visuals[session.SessionId] = CreateVisuals(session.SessionId, session.Center, session.Radius);
         if (Player.m_localPlayer is not null)
             StartClientCountdown((int)Math.Ceiling(settings.CountdownSeconds));
@@ -42,6 +45,8 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
     public void DuelStarted(DuelSession session)
     {
         // The marker and boundary remain in place for the active duel.
+        if (session.Second.IsSimulated)
+            testCombatant.EnableDamage(session.Second.StableId);
     }
 
     public void DuelEnded(DuelSession session, DuelResult result)
@@ -49,7 +54,10 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
         if (visuals.Remove(session.SessionId, out var current))
             current.Destroy();
         if (session.Second.IsSimulated)
+        {
+            testCombatant.DisableDamage(session.Second.StableId);
             testCombatant.Destroy(session.Second.StableId);
+        }
         duelEnded?.Invoke(session, result);
     }
 

@@ -22,13 +22,13 @@ internal sealed class DuelTestRpcBridge
     private readonly CustomRPC rpc;
     private readonly CustomRPC presentationRpc;
     private readonly Func<string, ParsedDuelCommand, string> serverHandler;
-    private readonly Action<DuelPosition, double, bool>? clientPresentation;
+    private readonly Action<DuelPosition, double, bool, int>? clientPresentation;
     private readonly Action<ParsedDuelCommand, string>? clientResponse;
     private readonly Queue<ParsedDuelCommand> pendingClientCommands = new();
 
     public DuelTestRpcBridge(
         Func<string, ParsedDuelCommand, string> serverHandler,
-        Action<DuelPosition, double, bool>? clientPresentation = null,
+        Action<DuelPosition, double, bool, int>? clientPresentation = null,
         Action<ParsedDuelCommand, string>? clientResponse = null)
     {
         this.serverHandler = serverHandler;
@@ -43,33 +43,26 @@ internal sealed class DuelTestRpcBridge
         if (ZNet.instance is null || !ZNet.instance.IsServer())
             return;
 
-        var peerIds = new List<long>();
-        foreach (var peer in ZNet.instance.GetPeers())
-        {
-            if (peer is null) continue;
-            var peerId = peer.GetType().GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
-            if (peerId is long id && id > 0)
-                peerIds.Add(id);
-        }
-
-        if (peerIds.Count == 0)
+        var peers = ZNet.instance.GetConnectedPeers();
+        if (peers.Count == 0)
         {
             Debug.LogWarning("[HolmgangDuelMod] Could not broadcast duel test presentation: no connected peers.");
             return;
         }
 
-        Debug.Log($"[HolmgangDuelMod] Broadcasting duel test presentation ({(ended ? "end" : "start")}) to {peerIds.Count} peer(s).");
+        var countdownSeconds = ended
+            ? 0
+            : Math.Max(1, (int)Math.Ceiling((session.CountdownEndsAt?.Subtract(DateTimeOffset.UtcNow).TotalSeconds) ?? 0d));
+        Debug.Log($"[HolmgangDuelMod] Broadcasting duel test presentation ({(ended ? "end" : "start")}) to {peers.Count} peer(s).");
 
-        foreach (var peerId in peerIds)
-        {
-            var package = new ZPackage();
-            package.Write(ended ? 2 : 1);
-            package.Write((float)session.Center.X);
-            package.Write((float)session.Center.Y);
-            package.Write((float)session.Center.Z);
-            package.Write((float)session.Radius);
-            presentationRpc.SendPackage(peerId, package);
-        }
+        var package = new ZPackage();
+        package.Write(ended ? 2 : 1);
+        package.Write((float)session.Center.X);
+        package.Write((float)session.Center.Y);
+        package.Write((float)session.Center.Z);
+        package.Write((float)session.Radius);
+        package.Write(countdownSeconds);
+        presentationRpc.SendPackage(peers, package);
     }
 
     public bool TrySend(string callerId, ParsedDuelCommand command, out string message)
@@ -86,7 +79,15 @@ internal sealed class DuelTestRpcBridge
         package.Write(command.PlayerName ?? string.Empty);
         package.Write((float)(command.Health ?? -1d));
         pendingClientCommands.Enqueue(command);
-        rpc.SendPackage(GetServerPeerId(), package);
+        var serverPeerId = GetServerPeerId();
+        if (serverPeerId <= 0)
+        {
+            Debug.LogWarning("[HolmgangDuelMod] Cannot send duel test command: server peer is unavailable.");
+            message = "Duel test server connection is not ready.";
+            return false;
+        }
+
+        rpc.SendPackage(serverPeerId, package);
         message = "Test command sent to the dedicated server.";
         return true;
     }
@@ -166,8 +167,9 @@ internal sealed class DuelTestRpcBridge
             var kind = package.ReadInt();
             var center = new DuelPosition(package.ReadSingle(), package.ReadSingle(), package.ReadSingle());
             var radius = package.ReadSingle();
+            var countdownSeconds = package.ReadInt();
             Debug.Log($"[HolmgangDuelMod] Received duel test presentation ({kind}) from server.");
-            clientPresentation?.Invoke(center, radius, kind == 2);
+            clientPresentation?.Invoke(center, radius, kind == 2, countdownSeconds);
         }
         catch
         {
@@ -228,5 +230,6 @@ internal sealed class DuelTestRpcBridge
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         return method?.Invoke(ZRoutedRpc.instance, null) is long peerId ? peerId : 0L;
     }
+
 }
 #endif
