@@ -61,6 +61,15 @@ public sealed class DuelManager
         }
     }
 
+    public bool HasPendingRequest(string requesterId, string targetId, DateTimeOffset now)
+    {
+        lock (sync)
+        {
+            RemoveExpiredRequests(now);
+            return requestsByTarget.TryGetValue(targetId, out var request) && request.Matches(requesterId, targetId);
+        }
+    }
+
     public bool TryCancelRequest(string playerId, DateTimeOffset now)
     {
         lock (sync)

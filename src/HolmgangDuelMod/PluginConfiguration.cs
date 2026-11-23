@@ -49,7 +49,7 @@ internal sealed class PluginConfiguration
         return new PluginConfiguration(
             config.Bind("Duel", "RequestMaxDistance", 20f, "Maximum distance for sending or accepting a duel request."),
             config.Bind("Duel", "DuelRadius", 15f, "Horizontal radius of an active duel."),
-            config.Bind("Duel", "CountdownSeconds", 10f, "Countdown duration before combat begins."),
+            config.Bind("Duel", "CountdownSeconds", 5f, "Countdown duration before combat begins."),
             config.Bind("Duel", "DefeatHealth", 1f, "Health threshold that ends an active duel."),
             config.Bind("Duel", "RequestTimeoutSeconds", 30f, "How long an unanswered request remains valid."),
             config.Bind("Duel", "PostDuelCooldownSeconds", 5f, "Cooldown after a duel ends."),

@@ -9,22 +9,20 @@ namespace Catosaurluna.HolmgangDuelMod.Runtime;
 internal sealed class DuelRuntimePresentation : IDuelPresentation
 {
     private readonly DuelSettings settings;
-    private readonly GreydwarfTestCombatant testCombatant;
     private readonly Action<DuelSession>? countdownStarted;
     private readonly Action<DuelSession, DuelResult>? duelEnded;
     private readonly Dictionary<Guid, Visuals> visuals = new();
     private Guid? clientTestVisualId;
     private float clientCountdownEndsAt = -1f;
     private int lastClientCountdownSecond = -1;
+    private readonly DuelPvpState pvp = new();
 
     public DuelRuntimePresentation(
         DuelSettings settings,
-        GreydwarfTestCombatant testCombatant,
         Action<DuelSession>? countdownStarted = null,
         Action<DuelSession, DuelResult>? duelEnded = null)
     {
         this.settings = settings;
-        this.testCombatant = testCombatant;
         this.countdownStarted = countdownStarted;
         this.duelEnded = duelEnded;
     }
@@ -32,9 +30,6 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
     public void CountdownStarted(DuelSession session)
     {
         if (visuals.ContainsKey(session.SessionId)) return;
-
-        if (session.Second.IsSimulated)
-            testCombatant.ProtectCountdown(session.Second.StableId, ToVector3(session.Center));
 
         visuals[session.SessionId] = CreateVisuals(session.SessionId, session.Center, session.Radius);
         if (Player.m_localPlayer is not null)
@@ -44,21 +39,29 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
 
     public void DuelStarted(DuelSession session)
     {
-        // The marker and boundary remain in place for the active duel.
-        if (session.Second.IsSimulated)
-            testCombatant.EnableDamage(session.Second.StableId);
+        // PvP is enabled only here, after the countdown. Who may damage whom is
+        // still enforced by the damage hook, and the marker and boundary remain
+        // in place for the active duel.
+        pvp.Engage(session);
     }
 
     public void DuelEnded(DuelSession session, DuelResult result)
     {
+        pvp.Restore(session);
         if (visuals.Remove(session.SessionId, out var current))
             current.Destroy();
-        if (session.Second.IsSimulated)
-        {
-            testCombatant.DisableDamage(session.Second.StableId);
-            testCombatant.Destroy(session.Second.StableId);
-        }
+        PrintChat(DuelResultText.Describe(session, result));
         duelEnded?.Invoke(session, result);
+    }
+
+    internal void ReconcilePvp() => pvp.ReconcileReturningPlayers();
+
+    internal static void PrintChat(string message)
+    {
+        if (Chat.instance is not null)
+            Chat.instance.AddString(message);
+        else if (Console.instance is not null)
+            Console.instance.Print(message);
     }
 
     internal void ShowClientTestPresentation(DuelPosition center, double radius, int countdownSeconds = 0)
@@ -138,6 +141,7 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
         pole.transform.localPosition = new Vector3(0, 1.5f, 0);
         pole.transform.localScale = new Vector3(0.06f, 1.5f, 0.06f);
         RemoveCollider(pole);
+        SetUnlitColor(pole, new Color(0.35f, 0.22f, 0.1f, 1f));
 
         var cloth = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cloth.name = "DuelFlagCloth";
@@ -145,7 +149,7 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
         cloth.transform.localPosition = new Vector3(0.38f, 2.65f, 0);
         cloth.transform.localScale = new Vector3(0.7f, 0.45f, 0.04f);
         RemoveCollider(cloth);
-        SetColor(cloth, new Color(0.65f, 0.05f, 0.04f, 1f));
+        SetUnlitColor(cloth, new Color(0.95f, 0.95f, 0.95f, 1f));
 
         return flagRoot;
     }
@@ -155,10 +159,13 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
         var bubble = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         bubble.name = "DuelBoundaryBubble";
         bubble.transform.SetParent(parent, true);
-        bubble.transform.position = position + Vector3.up * radius;
+        // Center the sphere on the ground so its equator sits at ground level
+        // with a horizontal radius equal to the duel radius. The lower half is
+        // hidden by terrain, leaving a dome that marks the fight area.
+        bubble.transform.position = position;
         bubble.transform.localScale = Vector3.one * (radius * 2f);
         RemoveCollider(bubble);
-        SetColor(bubble, new Color(0.15f, 0.55f, 1f, 0.12f));
+        SetUnlitColor(bubble, new Color(0.15f, 0.55f, 1f, 0.2f));
         return bubble;
     }
 
@@ -168,11 +175,14 @@ internal sealed class DuelRuntimePresentation : IDuelPresentation
         if (collider is not null) UnityEngine.Object.Destroy(collider);
     }
 
-    private static void SetColor(GameObject gameObject, Color color)
+    // The player stands inside the bubble, so its faces must render from both
+    // sides. Standard transparent shaders cull back faces and make the dome
+    // invisible from inside. Sprites/Default is unlit and has Cull Off.
+    private static void SetUnlitColor(GameObject gameObject, Color color)
     {
         var renderer = gameObject.GetComponent<Renderer>();
         if (renderer is null) return;
-        var shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
+        var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Legacy Shaders/Particles/Alpha Blended");
         if (shader is null) return;
         var material = new Material(shader) { color = color };
         renderer.material = material;

@@ -21,16 +21,28 @@ public sealed class Plugin : BaseUnityPlugin
     private DuelCommandService? commandService;
     private DuelRuntimeCoordinator? runtimeCoordinator;
     private DuelRuntimePresentation? runtimePresentation;
-    private GreydwarfTestCombatant? greydwarfTestCombatant;
+    private VirtualTestCombatant? testCombatant;
     private DuelTestRpcBridge? duelTestRpc;
     private ServerAuthoritativeTestModeGate? testModeGate;
     private DuelSettings? settings;
     private float nextRuntimeTick;
+    private bool legacyProxyCleanupDone;
+    private bool duelProtectionArmed;
 
     private void Awake()
     {
-        new HarmonyLib.Harmony(PluginMetadata.Guid).PatchAll();
-        Logger.LogInfo("Countdown damage gate installed on Character.Damage.");
+        try
+        {
+            new HarmonyLib.Harmony(PluginMetadata.Guid).PatchAll(typeof(Plugin).Assembly);
+            duelProtectionArmed = true;
+        }
+        catch (Exception exception)
+        {
+            // Fail closed: the plugin keeps loading, but duels cannot start without
+            // the damage filter in place.
+            Logger.LogError($"Duel damage protection failed to install; duels are disabled. {exception.Message}");
+        }
+
         configuration = PluginConfiguration.Bind(Config);
         settings = configuration.ReadValidated(out var corrections);
         foreach (var correction in corrections)
@@ -38,8 +50,8 @@ public sealed class Plugin : BaseUnityPlugin
 
         playerDirectory = new ValheimPlayerDirectory();
         var manager = new DuelManager();
-        greydwarfTestCombatant = new GreydwarfTestCombatant();
-        greydwarfTestCombatant.DestroyStaleTestCombatants();
+        DuelDamageGate.Manager = manager;
+        testCombatant = new VirtualTestCombatant(manager, WorldName);
         testModeGate = new ServerAuthoritativeTestModeGate(settings.EnableAdminTestMode);
         commandService = new DuelCommandService(
             manager,
@@ -47,18 +59,21 @@ public sealed class Plugin : BaseUnityPlugin
             playerDirectory,
             new ValheimAdminAuthorizer(),
             new SystemDuelClock(),
-            greydwarfTestCombatant,
-            testModeGate);
+            testCombatant,
+            testModeGate,
+            (session, result) => runtimePresentation?.DuelEnded(session, result),
+            notifyPlayer: (platformId, message) => duelTestRpc?.NotifyPlayer(platformId, message));
         runtimePresentation = new DuelRuntimePresentation(
             settings,
-            greydwarfTestCombatant,
             session => duelTestRpc?.BroadcastPresentation(session, ended: false),
-            (session, _) => duelTestRpc?.BroadcastPresentation(session, ended: true));
+            (session, result) => duelTestRpc?.BroadcastPresentation(session, ended: true, message: DuelResultText.Describe(session, result)));
         runtimeCoordinator = new DuelRuntimeCoordinator(
             manager,
             settings,
-            new CompositeRuntimeParticipantSource(playerDirectory, greydwarfTestCombatant),
-            runtimePresentation);
+            new CompositeParticipantSource(playerDirectory, testCombatant),
+            runtimePresentation,
+            testCombatant,
+            diagnostics: message => Logger.LogInfo(message));
         duelTestRpc = new DuelTestRpcBridge((callerId, command) =>
             commandService.Handle(callerId, command),
             (center, radius, ended, countdownSeconds) =>
@@ -94,21 +109,44 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Update()
     {
-        if (runtimeCoordinator is null || settings is null || Time.unscaledTime < nextRuntimeTick)
+        if (runtimeCoordinator is null || settings is null)
+            return;
+
+        if (!legacyProxyCleanupDone && ZNetScene.instance is not null && ZNet.instance is not null && ZNet.instance.IsServer())
+        {
+            legacyProxyCleanupDone = true;
+            var removed = LegacyTestCreatureCleanup.RemoveLegacyProxies();
+            if (removed > 0)
+                Logger.LogInfo($"Removed {removed} legacy Greydwarf test proxy object(s) left in the world.");
+        }
+
+        if (Time.unscaledTime < nextRuntimeTick)
             return;
 
         nextRuntimeTick = Time.unscaledTime + (float)settings.BoundaryCheckIntervalSeconds;
-        greydwarfTestCombatant?.CleanupPendingSpawns();
         runtimeCoordinator.Tick(DateTimeOffset.UtcNow);
+        if (ZNet.instance is not null && ZNet.instance.IsServer())
+            runtimePresentation?.ReconcilePvp();
         runtimePresentation?.TickClientPresentation();
     }
+
+    private static string WorldName() => ZNet.instance is null ? "unknown" : ZNet.instance.GetWorldName();
 
     private string HandleCommand(ParsedDuelCommand command)
     {
         if (playerDirectory is null || commandService is null || !playerDirectory.TryGetLocalPlayerId(out var localPlayerId))
             return "HolmgangDuelMod requires a loaded local player.";
 
-        if (command.Kind == DuelCommandKind.TestStart ||
+        // Duel state is authoritative on the server, so every duel command runs
+        // there. Clients only send the command and print the server's reply.
+        if (!duelProtectionArmed && ZNet.instance is not null && ZNet.instance.IsServer() &&
+            command.Kind is DuelCommandKind.Request or DuelCommandKind.Accept or DuelCommandKind.TestStart)
+            return "Duels are disabled: damage protection failed to load. Check the BepInEx log.";
+
+        // Duel state is authoritative on the server, so every duel command runs
+        // there. Clients only send the command and print the server's reply.
+        if (command.Kind is DuelCommandKind.Request or DuelCommandKind.Accept or DuelCommandKind.Cancel or DuelCommandKind.Status ||
+            command.Kind == DuelCommandKind.TestStart ||
             command.Kind == DuelCommandKind.TestDamage ||
             command.Kind == DuelCommandKind.TestLeave ||
             command.Kind == DuelCommandKind.TestCancel ||
@@ -119,7 +157,7 @@ public sealed class Plugin : BaseUnityPlugin
 
             return duelTestRpc is not null && duelTestRpc.TrySend(localPlayerId, command, out var requestMessage)
                 ? requestMessage
-                : "Duel test commands must be sent while connected to the dedicated server.";
+                : "Duel commands must be sent while connected to the dedicated server.";
         }
 
         return commandService.Handle(localPlayerId, command);

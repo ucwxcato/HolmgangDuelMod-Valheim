@@ -15,7 +15,7 @@ public sealed class DuelSettingsTests
         });
 
         Assert.Equal(15, result.Settings.DuelRadius);
-        Assert.Equal(10, result.Settings.CountdownSeconds);
+        Assert.Equal(5, result.Settings.CountdownSeconds);
         Assert.Equal(5, result.Settings.PostDuelCooldownSeconds);
         Assert.Equal(3, result.Corrections.Count);
     }

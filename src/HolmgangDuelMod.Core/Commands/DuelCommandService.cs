@@ -35,6 +35,8 @@ public sealed class DuelCommandService
     private readonly IDuelClock clock;
     private readonly ITestCombatantController? testCombatant;
     private readonly ITestModeGate testModeGate;
+    private readonly Action<DuelSession, DuelResult>? sessionEnded;
+    private readonly Action<string, string>? notifyPlayer;
     private readonly Dictionary<string, TestSession> testSessions = new(StringComparer.Ordinal);
 
     public DuelCommandService(
@@ -44,8 +46,12 @@ public sealed class DuelCommandService
         IAdminAuthorizer adminAuthorizer,
         IDuelClock clock,
         ITestCombatantController? testCombatant = null,
-        ITestModeGate? testModeGate = null)
+        ITestModeGate? testModeGate = null,
+        Action<DuelSession, DuelResult>? sessionEnded = null,
+        Action<string, string>? notifyPlayer = null)
     {
+        this.sessionEnded = sessionEnded;
+        this.notifyPlayer = notifyPlayer;
         this.manager = manager;
         this.settings = settings;
         this.players = players;
@@ -86,14 +92,22 @@ public sealed class DuelCommandService
         if (caller.Position.HorizontalDistanceSquared(target.Position) > settings.RequestMaxDistance * settings.RequestMaxDistance)
             return "That player is too far away to receive a duel request.";
 
-        return manager.TryCreateRequest(
-            ToParticipant(caller),
-            ToParticipant(target),
-            clock.UtcNow,
-            TimeSpan.FromSeconds(settings.RequestTimeoutSeconds),
-            out _)
-            ? $"Duel request sent to {target.DisplayName}. They can use /duel {caller.DisplayName} to accept."
-            : "That player is busy, on cooldown, or already has a pending duel request.";
+        // Reciprocal acceptance: if the target already asked this caller to duel,
+        // /duel <target> accepts that request instead of creating a new one.
+        if (manager.HasPendingRequest(target.StableId, caller.StableId, clock.UtcNow))
+            return Accept(caller, target.DisplayName);
+
+        if (!manager.TryCreateRequest(
+                ToParticipant(caller),
+                ToParticipant(target),
+                clock.UtcNow,
+                TimeSpan.FromSeconds(settings.RequestTimeoutSeconds),
+                out _))
+            return "That player is busy, on cooldown, or already has a pending duel request.";
+
+        notifyPlayer?.Invoke(target.StableId,
+            $"{caller.DisplayName} challenged you to a duel. Type /duel {caller.DisplayName} to accept within {settings.RequestTimeoutSeconds:0} seconds.");
+        return $"Duel request sent to {target.DisplayName}. They can use /duel {caller.DisplayName} to accept.";
     }
 
     private string Accept(PlayerSnapshot caller, string? query)
@@ -125,7 +139,7 @@ public sealed class DuelCommandService
             return "Duel request cancelled.";
         if (manager.TryGetSession(caller.StableId, out var session) && session is not null)
         {
-            manager.TryEndSession(session.SessionId, DuelResult.Draw(DuelEndReason.Cancelled), clock.UtcNow, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds));
+            EndSession(session, DuelResult.Draw(DuelEndReason.Cancelled));
             return "Duel cancelled.";
         }
         return "You have no pending request or duel to cancel.";
@@ -143,6 +157,7 @@ public sealed class DuelCommandService
         if (!testModeGate.IsEnabled)
             return "Server duel test mode is disabled.";
 
+        PruneEndedTestSessions();
         return command.Kind switch
         {
             DuelCommandKind.TestStart => TestStart(caller),
@@ -170,7 +185,8 @@ public sealed class DuelCommandService
         if (testCombatant is not null && !testCombatant.TrySpawn(session))
         {
             manager.TryEndSession(session.SessionId, DuelResult.Draw(DuelEndReason.InvalidParticipant), now, TimeSpan.Zero);
-            return "Could not spawn the Greydwarf test opponent.";
+            testSessions.Remove(caller.StableId);
+            return "Could not create the test opponent.";
         }
         return "Simulated duel started against TestOpponent.";
     }
@@ -179,11 +195,18 @@ public sealed class DuelCommandService
     {
         if (!testSessions.TryGetValue(caller.StableId, out var test)) return "No simulated duel is active.";
         if (testCombatant is not null)
-            return "Live test opponent active. Hit the Greydwarf normally; do not use /dueltest damage.";
+        {
+            return testCombatant.TrySetHealth(test.OpponentId, health) switch
+            {
+                TestDamageOutcome.Applied => $"TestOpponent health set to {health:0.##}. The defeat rule resolves on the next server tick.",
+                TestDamageOutcome.ProtectedByCountdown => "TestOpponent is protected during the countdown; no damage was applied.",
+                _ => "No simulated duel is active."
+            };
+        }
         test.Health = health;
         if (health <= settings.DefeatHealth && manager.TryGetSession(caller.StableId, out var session) && session is not null)
         {
-            manager.TryEndSession(session.SessionId, DuelResult.Winner(DuelEndReason.HealthThreshold, caller.StableId, test.OpponentId), clock.UtcNow, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds));
+            EndSession(session, DuelResult.Winner(DuelEndReason.HealthThreshold, caller.StableId, test.OpponentId));
             testSessions.Remove(caller.StableId);
             return "TestOpponent reached the defeat threshold. You win.";
         }
@@ -194,7 +217,7 @@ public sealed class DuelCommandService
     {
         if (!testSessions.TryGetValue(caller.StableId, out var test)) return "No simulated duel is active.";
         if (manager.TryGetSession(caller.StableId, out var session) && session is not null)
-            manager.TryEndSession(session.SessionId, DuelResult.Winner(DuelEndReason.RadiusExit, caller.StableId, test.OpponentId), clock.UtcNow, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds));
+            EndSession(session, DuelResult.Winner(DuelEndReason.RadiusExit, caller.StableId, test.OpponentId));
         testCombatant?.Destroy(test.OpponentId);
         testSessions.Remove(caller.StableId);
         return "TestOpponent left the arena. You win.";
@@ -207,10 +230,39 @@ public sealed class DuelCommandService
     {
         if (!testSessions.TryGetValue(caller.StableId, out var test)) return "No simulated duel is active.";
         if (manager.TryGetSession(caller.StableId, out var session) && session is not null)
-            manager.TryEndSession(session.SessionId, DuelResult.Draw(reason), clock.UtcNow, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds));
+            EndSession(session, DuelResult.Draw(reason));
         testCombatant?.Destroy(test.OpponentId);
         testSessions.Remove(caller.StableId);
         return message;
+    }
+
+    /// <summary>
+    /// Ends a session from a command and tells the presentation layer, so
+    /// flag, bubble, and client end visuals are removed on every command path.
+    /// </summary>
+    private void EndSession(DuelSession session, DuelResult result)
+    {
+        if (manager.TryEndSession(session.SessionId, result, clock.UtcNow, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds)))
+            sessionEnded?.Invoke(session, result);
+    }
+
+    /// <summary>
+    /// The coordinator ends test duels on its own (health, radius, disconnect).
+    /// Drop test bookkeeping for any duel that is no longer indexed so the
+    /// caller can start a new test duel.
+    /// </summary>
+    private void PruneEndedTestSessions()
+    {
+        foreach (var pair in testSessions.ToArray())
+        {
+            if (manager.TryGetSession(pair.Key, out var session) &&
+                session is not null &&
+                session.SessionId == pair.Value.SessionId)
+                continue;
+
+            testCombatant?.Destroy(pair.Value.OpponentId);
+            testSessions.Remove(pair.Key);
+        }
     }
 
     private static string LookupFailure(PlayerLookupResult result) => result.Status switch

@@ -38,7 +38,7 @@ internal sealed class DuelTestRpcBridge
         presentationRpc = NetworkManager.Instance.AddRPC(PresentationRpcName, IgnorePresentationOnServer, ReceivePresentationOnClient);
     }
 
-    public void BroadcastPresentation(DuelSession session, bool ended)
+    public void BroadcastPresentation(DuelSession session, bool ended, string message = "")
     {
         if (ZNet.instance is null || !ZNet.instance.IsServer())
             return;
@@ -62,7 +62,35 @@ internal sealed class DuelTestRpcBridge
         package.Write((float)session.Center.Z);
         package.Write((float)session.Radius);
         package.Write(countdownSeconds);
+        package.Write(ended ? message : string.Empty);
         presentationRpc.SendPackage(peers, package);
+    }
+
+    /// <summary>
+    /// Sends one player a chat line, such as a duel challenge. Uses the presentation
+    /// channel with kind 3, which clients print without touching duel visuals.
+    /// </summary>
+    public void NotifyPlayer(string platformId, string message)
+    {
+        if (ZNet.instance is null || !ZNet.instance.IsServer())
+            return;
+
+        var routedId = FindRoutedPeerId(platformId);
+        if (routedId is null)
+        {
+            Debug.LogWarning($"[HolmgangDuelMod] Could not notify platform ID {platformId}: no matching connection.");
+            return;
+        }
+
+        var package = new ZPackage();
+        package.Write(3);
+        package.Write(0f);
+        package.Write(0f);
+        package.Write(0f);
+        package.Write(0f);
+        package.Write(0);
+        package.Write(message);
+        presentationRpc.SendPackage(routedId.Value, package);
     }
 
     public bool TrySend(string callerId, ParsedDuelCommand command, out string message)
@@ -88,7 +116,7 @@ internal sealed class DuelTestRpcBridge
         }
 
         rpc.SendPackage(serverPeerId, package);
-        message = "Test command sent to the dedicated server.";
+        message = "Sent to the dedicated server.";
         return true;
     }
 
@@ -168,8 +196,18 @@ internal sealed class DuelTestRpcBridge
             var center = new DuelPosition(package.ReadSingle(), package.ReadSingle(), package.ReadSingle());
             var radius = package.ReadSingle();
             var countdownSeconds = package.ReadInt();
-            Debug.Log($"[HolmgangDuelMod] Received duel test presentation ({kind}) from server.");
-            clientPresentation?.Invoke(center, radius, kind == 2, countdownSeconds);
+            var message = package.ReadString();
+            if (kind == 3)
+            {
+                DuelRuntimePresentation.PrintChat(message);
+            }
+            else
+            {
+                Debug.Log($"[HolmgangDuelMod] Received duel test presentation ({kind}) from server.");
+                clientPresentation?.Invoke(center, radius, kind == 2, countdownSeconds);
+                if (kind == 2 && message.Length > 0)
+                    DuelRuntimePresentation.PrintChat(message);
+            }
         }
         catch
         {
@@ -221,6 +259,30 @@ internal sealed class DuelTestRpcBridge
             Debug.LogWarning($"[HolmgangDuelMod] Could not resolve RPC peer identity: {exception.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Finds the routed peer ID for a platform user ID. Matches the same
+    /// authenticated character UserID that PlayerIdentity uses.
+    /// </summary>
+    private static long? FindRoutedPeerId(string platformId)
+    {
+        foreach (var peer in ZNet.instance.GetPeers())
+        {
+            if (peer is null)
+                continue;
+
+            var peerType = peer.GetType();
+            var characterId = peerType.GetField("m_characterID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+            var userId = characterId?.GetType().GetProperty("UserID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(characterId);
+            if (userId is not long uid || uid.ToString(System.Globalization.CultureInfo.InvariantCulture) != platformId)
+                continue;
+
+            var routed = peerType.GetField("m_uid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(peer);
+            return routed is long routedId ? routedId : null;
+        }
+
+        return null;
     }
 
     private static long GetServerPeerId()

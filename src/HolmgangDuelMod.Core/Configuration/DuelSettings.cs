@@ -4,7 +4,7 @@ public sealed class DuelSettings
 {
     public double RequestMaxDistance { get; set; } = 20;
     public double DuelRadius { get; set; } = 15;
-    public double CountdownSeconds { get; set; } = 10;
+    public double CountdownSeconds { get; set; } = 5;
     public double DefeatHealth { get; set; } = 1;
     public double RequestTimeoutSeconds { get; set; } = 30;
     public double PostDuelCooldownSeconds { get; set; } = 5;
@@ -45,7 +45,7 @@ public static class DuelSettingsValidator
         {
             RequestMaxDistance = Positive(source.RequestMaxDistance, 20, nameof(DuelSettings.RequestMaxDistance), 1000),
             DuelRadius = Positive(source.DuelRadius, 15, nameof(DuelSettings.DuelRadius), 1000),
-            CountdownSeconds = Positive(source.CountdownSeconds, 10, nameof(DuelSettings.CountdownSeconds), 300),
+            CountdownSeconds = Positive(source.CountdownSeconds, 5, nameof(DuelSettings.CountdownSeconds), 300),
             DefeatHealth = Positive(source.DefeatHealth, 1, nameof(DuelSettings.DefeatHealth), 1000000),
             RequestTimeoutSeconds = Positive(source.RequestTimeoutSeconds, 30, nameof(DuelSettings.RequestTimeoutSeconds), 3600),
             PostDuelCooldownSeconds = source.PostDuelCooldownSeconds >= 0 && source.PostDuelCooldownSeconds <= 3600

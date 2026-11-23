@@ -7,7 +7,7 @@
     <ValheimInstall Condition="'$(ValheimInstall)' == ''">$(VALHEIM_INSTALL)</ValheimInstall>
     <ValheimManaged Condition="'$(ValheimManaged)' == ''">$(ValheimInstall)\valheim_Data\Managed</ValheimManaged>
     <BepInExCore Condition="'$(BepInExCore)' == ''">$(ValheimInstall)\BepInEx\core</BepInExCore>
-    <JotunnAssembly Condition="'$(JotunnAssembly)' == ''">$(MSBuildThisFileDirectory)..\..\.deps\Jotunn-2.29.2\plugins\Jotunn.dll</JotunnAssembly>
+    <JotunnAssembly Condition="'$(JotunnAssembly)' == ''">$(MSBuildThisFileDirectory)..\..\.deps\Jotunn-2.30.2\plugins\Jotunn.dll</JotunnAssembly>
   </PropertyGroup>
 
   <ItemGroup>

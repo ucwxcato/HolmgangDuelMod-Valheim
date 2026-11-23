@@ -12,6 +12,7 @@ public interface IRuntimeParticipantSource
 public interface ITestCombatantController : IRuntimeParticipantSource
 {
     bool TrySpawn(DuelSession session);
+    TestDamageOutcome TrySetHealth(string stableId, double health);
     void Destroy(string stableId);
 }
 
@@ -35,18 +36,26 @@ public sealed class DuelRuntimeCoordinator
     private readonly DuelSettings settings;
     private readonly IRuntimeParticipantSource participants;
     private readonly IDuelPresentation presentation;
+    private readonly ITestCombatantController? testCombatant;
+    private readonly Action<string>? diagnostics;
     private readonly HashSet<Guid> presentedCountdowns = new();
+    private PlayerSnapshot? lastFirst;
+    private PlayerSnapshot? lastSecond;
 
     public DuelRuntimeCoordinator(
         DuelManager manager,
         DuelSettings settings,
         IRuntimeParticipantSource participants,
-        IDuelPresentation? presentation = null)
+        IDuelPresentation? presentation = null,
+        ITestCombatantController? testCombatant = null,
+        Action<string>? diagnostics = null)
     {
         this.manager = manager;
         this.settings = settings;
         this.participants = participants;
         this.presentation = presentation ?? new NullDuelPresentation();
+        this.testCombatant = testCombatant;
+        this.diagnostics = diagnostics;
     }
 
     public void Tick(DateTimeOffset now)
@@ -152,22 +161,42 @@ public sealed class DuelRuntimeCoordinator
     {
         if (!manager.TryEndSession(session.SessionId, result, now, TimeSpan.FromSeconds(settings.PostDuelCooldownSeconds)))
             return;
+        diagnostics?.Invoke(DescribeEnd(session, result));
         presentedCountdowns.Remove(session.SessionId);
+        // Every end path removes the test opponent here, so cleanup never
+        // depends on which presentation (if any) is attached.
+        if (session.First.IsSimulated)
+            testCombatant?.Destroy(session.First.StableId);
+        if (session.Second.IsSimulated)
+            testCombatant?.Destroy(session.Second.StableId);
         presentation.DuelEnded(session, result);
     }
 
     private bool TryGetPair(DuelSession session, out PlayerSnapshot first, out PlayerSnapshot second)
     {
-        if (participants.TryGet(session.First.StableId, out var firstSnapshot) && firstSnapshot is not null &&
-            participants.TryGet(session.Second.StableId, out var secondSnapshot) && secondSnapshot is not null)
+        participants.TryGet(session.First.StableId, out lastFirst);
+        participants.TryGet(session.Second.StableId, out lastSecond);
+        if (lastFirst is not null && lastSecond is not null)
         {
-            first = firstSnapshot;
-            second = secondSnapshot;
+            first = lastFirst;
+            second = lastSecond;
             return true;
         }
 
         first = null!;
         second = null!;
         return false;
+    }
+
+    private string DescribeEnd(DuelSession session, DuelResult result)
+    {
+        string Describe(PlayerSnapshot? snapshot, DuelParticipant participant) =>
+            snapshot is null
+                ? $"{participant.DisplayName}=missing"
+                : $"{snapshot.DisplayName}[online={snapshot.IsOnline} dead={snapshot.IsDead} hp={snapshot.Health:0.##} world={snapshot.WorldId} pos=({snapshot.Position.X:0.##},{snapshot.Position.Z:0.##}) inside={session.IsInside(snapshot.Position)}]";
+
+        return $"Duel {session.SessionId:N} ended: reason={result.Reason} winner={result.WinnerId ?? "none"} loser={result.LoserId ?? "none"} " +
+               $"center=({session.Center.X:0.##},{session.Center.Z:0.##}) radius={session.Radius} " +
+               $"{Describe(lastFirst, session.First)} {Describe(lastSecond, session.Second)}";
     }
 }

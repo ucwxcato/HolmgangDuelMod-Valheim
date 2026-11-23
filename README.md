@@ -9,7 +9,7 @@ The canonical implementation plan is [DOCS/DUEL_DEVPLAN.md](DOCS/DUEL_DEVPLAN.md
 - .NET SDK 8.x
 - A local Valheim installation for runtime/plugin compilation
 - BepInExPack Valheim `5.4.2333`
-- Jötunn `2.29.2`
+- Jötunn `2.30.2`
 
 The BepInEx and Jötunn packages are available in the ignored `.deps/` directory for local development. Valheim game assemblies are intentionally not stored in this repository.
 

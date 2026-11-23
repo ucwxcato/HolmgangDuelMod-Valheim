@@ -25,7 +25,7 @@ Assert-Path $ServerExecutable 'Dedicated server executable'
 $solution = Join-Path $RepositoryRoot 'HolmgangDuelMod.sln'
 $depsRoot = Join-Path $RepositoryRoot '.deps'
 $bepRoot = Join-Path $depsRoot 'BepInExPack_Valheim-5.4.2333\BepInExPack_Valheim'
-$jotunnRoot = Join-Path $depsRoot 'Jotunn-2.29.2'
+$jotunnRoot = Join-Path $depsRoot 'Jotunn-2.30.2'
 $jotunnPlugin = Join-Path $jotunnRoot 'plugins'
 $serverBepInEx = Join-Path $ServerDirectory 'BepInEx'
 $serverPlugins = Join-Path $serverBepInEx 'plugins'
@@ -62,7 +62,7 @@ Write-Host "Deployed $($modBinary.FullName)" -ForegroundColor Green
 Get-ChildItem -LiteralPath $jotunnPlugin -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $jotunnPluginDirectory $_.Name) -Force
 }
-Write-Host 'Deployed Jötunn 2.29.2.' -ForegroundColor Green
+Write-Host 'Deployed Jötunn 2.30.2.' -ForegroundColor Green
 
 if ($InstallBepInExBootstrap) {
     Assert-Path $bepRoot 'BepInEx package root'

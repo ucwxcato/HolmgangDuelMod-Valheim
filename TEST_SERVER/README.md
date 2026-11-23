@@ -6,7 +6,7 @@ The isolated copy excludes the shared server’s BepInEx plugins, configs, cache
 
 - `HolmgangDuelMod.dll`
 - `HolmgangDuelMod.Core.dll` (required dependency)
-- `Jotunn.dll` and its package support files from the r2modman profile (currently 2.30.0)
+- `Jotunn.dll` and its package support files from the `Holmgang-TEST` r2modman profile (currently 2.30.2)
 - `ServerDevcommands.dll` from the r2modman test profile
 
 The launcher also copies the test profile's BepInEx `core`, Doorstop
@@ -14,7 +14,7 @@ configuration, Doorstop libraries, and `winhttp.dll` to the isolated server.
 This provides the BepInEx version required by the installed Server Devcommands
 package. It refuses to start if another plugin DLL is detected.
 
-Each launch also updates only `HolmgangDuelMod.dll` and `HolmgangDuelMod.Core.dll` in the `HolmgangDuelMod` r2modman client profile. JÃ¶tunn and all other client-profile mods remain managed by r2modman.
+Each launch also updates only `HolmgangDuelMod.dll` and `HolmgangDuelMod.Core.dll` in the `Holmgang-TEST` r2modman client profile at `C:\Users\magni\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\Holmgang-TEST`. The launcher copies them to `BepInEx\plugins\HolmgangDuelMod\` under their real assembly names. The Core DLL must keep its name because the plugin references it by assembly name. JÃ¶tunn and all other client-profile mods remain managed by r2modman.
 
 ## First run
 

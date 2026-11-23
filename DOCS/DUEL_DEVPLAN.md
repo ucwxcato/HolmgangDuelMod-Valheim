@@ -1,6 +1,6 @@
 ﻿# HolmgangDuelMod â€” Development Plan
 
-> **Status:** Implementation in progress; pure-domain tests, runtime build wiring, server-only test authorization, Greydwarf proxy, and temporary visuals are authored. Live gameplay verification remains outstanding.
+> **Status:** Implementation in progress; pure-domain tests (31 passing), runtime build wiring against Valheim dedicated-server assemblies and Jötunn 2.30.2, server-only test authorization, the server-owned virtual test opponent, and temporary visuals are authored. Live gameplay verification remains outstanding.
 >
 > **Author:** catosaurluna
 >
@@ -8,11 +8,11 @@
 >
 > **Authority:** This document owns the HolmgangDuelMod MVP behavior, state machine, configuration, safety rules, and verification gates. It is the canonical plan for this repository.
 >
-> **Target:** Valheim on the current supported Steam/PC build at implementation time, loaded through BepInEx. Local development packages fetched are BepInExPack Valheim `5.4.2333` and Jötunn `2.29.2`; the exact Valheim game build and runtime compatibility remain unverified.
+> **Target:** Valheim on the current supported Steam/PC build at implementation time, loaded through BepInEx. Local development packages fetched are BepInExPack Valheim `5.4.2333` and Jötunn `2.30.2`; the exact Valheim game build and runtime compatibility remain unverified.
 
 ## 0. Outcome
 
-Two players stand near each other, use `/duel <name>` in sequence, see a 10-second countdown and temporary duel boundary, fight with duel-only damage enabled, and receive a winner when one reaches the configured defeat threshold or leaves the boundary. The duel is cleaned up on every exit path.
+Two players stand near each other, use `/duel <name>` in sequence, see a 5-second countdown and temporary duel boundary, fight with duel-only damage enabled, and receive a winner when one reaches the configured defeat threshold or leaves the boundary. The duel is cleaned up on every exit path.
 
 Complete when:
 
@@ -25,14 +25,14 @@ two valid nearby players -> mutual /duel commands -> countdown + marker/boundary
 - **Mutual command acceptance:** `/duel <player>` sends a request when no matching request exists; the target runs `/duel <requester>` to accept. This matches the requested interaction while preventing unsolicited combat.
 - **One active duel per player:** A player cannot send, accept, or join another duel while pending or active, unless they first cancel/finish the current interaction.
 - **Proximity is checked twice:** both players must be within `RequestMaxDistance` when requesting/accepting, and remain within the active duel radius after the countdown.
-- **Countdown defaults to 10 seconds:** countdown duration is configurable, but must be positive and must not be bypassable by a client command.
+- **Countdown defaults to 5 seconds:** countdown duration is configurable, but must be positive and must not be bypassable by a client command.
 - **Leaving the radius is an immediate loss:** the first participant proven outside the boundary loses; if both are outside in the same authoritative tick, the duel is a draw/failsafe rather than awarding an arbitrary winner.
 - **Defeat threshold defaults to 1 HP:** reaching `DefeatHealth` or less ends the duel; the implementation must prevent ordinary death cleanup from producing a second result.
 - **Duel-only PvP:** do not rely on a global PvP toggle as the sole rule. Damage is allowed only when the attacker and target are the two active duel participants. Any pre-duel PvP state is restored after cleanup.
 - **Countdown safety:** no duel PvP setting or combat override may be applied during `Countdown`. Duel-only combat enforcement begins only when the authoritative countdown reaches zero and the session transitions to `Active`.
-- **Temporary presentation:** the flag and optional ward-like bubble are runtime objects/effects only. They must not create permanent build pieces or world-save entries.
+- **Temporary presentation:** the flag and optional ward-like bubble are runtime objects/effects only. They must not create permanent build pieces or world-save entries. The bubble is a translucent sphere centered on the duel center at ground level, so its horizontal footprint equals `DuelRadius` (2026-11-19). The boundary rule itself is horizontal only, so the dome is visual and does not limit height.
 - **Server test harness:** provide a disabled-by-default server-only simulated opponent so one person can test duel lifecycle, countdown, arena exit, and cleanup without a second real player. When explicitly enabled on the test server, the harness does not require a separate admin-list permission; it is never enabled by a client-local config value.
-- **Creature-backed test opponent:** the admin test harness should use a native `Greydwarf` prefab as the runtime combat proxy for the logical `TestOpponent`. Its normal AI, movement, attacks, health, and death should drive the same duel result paths, while the creature remains temporary and is removed during every cleanup path.
+- **Server-owned test opponent:** the admin test harness uses a non-networked `VirtualTestCombatant` (Core) as the logical `TestOpponent`. It has no Valheim object, ZDO, or world-save footprint; its health and position live in memory and the same coordinator evaluates it as a real player. The earlier native Greydwarf proxy was removed because its `ZNetScene` identity scans caused duplicate-creature and lifecycle failures on Valheim 1.0 (see DOCS/DUEL_RUNTIME_STATUS.md). Test damage is an explicit `/dueltest damage` event, applied only while the session is Active.
 - **Server-only test authorization:** `EnableAdminTestMode` is a server-side setting. A client-local config value and client-side admin claim must never authorize spawning, damage simulation, or duel results; test commands require a server-authoritative RPC/config gate.
 - **No rewards in MVP:** the mod declares a winner but does not transfer items, currency, experience, trophies, or rankings.
 - **Server/mod requirement:** all participating clients must run a compatible HolmgangDuelMod build; the host/dedicated-server behavior and exact sync strategy are a Phase 0 compatibility gate, not an assumption hidden in implementation.
@@ -88,7 +88,7 @@ Admin-only test commands, available only when testing is explicitly enabled:
 /dueltest reset       Force test-state cleanup after a failed development run
 ```
 
-The logical simulated opponent has a stable fake participant ID and display name. In the preferred runtime harness it is represented by a temporary native Greydwarf combat proxy. The proxy is not a fake player, must not be saved permanently, and must be removed if the duel, world, plugin, or authority ends unexpectedly. A headless/pure simulated participant remains available for unit tests.
+The logical simulated opponent has a stable fake participant ID and display name, and it is the same `VirtualTestCombatant` in unit tests and in the runtime harness. It is not a Valheim object or a fake player, is never written to the world, and is removed by the coordinator on every end path (natural end, cancel, reset, disconnect, or a new session replacing it). Cancelling the duel through `/dueltest cancel` runs the same cleanup.
 
 ## 4. Architecture and ownership
 
@@ -148,7 +148,7 @@ Proposed BepInEx config contract (names may be adjusted to actual binding conven
 [Duel]
 RequestMaxDistance = 20
 DuelRadius = 15
-CountdownSeconds = 10
+CountdownSeconds = 5
 DefeatHealth = 1
 RequestTimeoutSeconds = 30
 PostDuelCooldownSeconds = 5
@@ -228,18 +228,19 @@ EnableAdminTestMode = false
 
 ### Phase 2 â€” Runtime duel mechanics
 
-> **Current untested runtime regression fix (2026-09-09):** the Greydwarf proxy spawn is now idempotent while its native network object is registering, and the requesting client starts its local temporary flag/bubble and chat countdown from the confirmed command-response path as a fallback to the presentation RPC. This has compile/test evidence only; it is not live-verified.
+> **Current untested runtime change (2026-11-19):** the native Greydwarf proxy and its `Character.Damage` countdown hook were replaced with the non-networked `VirtualTestCombatant`. Evidence so far: `dotnet test` passes 31 pure tests (includes countdown-gated damage, coordinator health and radius resolution through the virtual opponent, and `/dueltest` restart after a coordinator-ended duel); the Release build compiles the `VALHEIM_RUNTIME` path against the Valheim dedicated-server assemblies and Jötunn 2.30.2. This is not live-verified.
 
-> **Next required smoke test:** with the isolated server and the r2modman `HolmgangDuelMod` profile running the same build, execute `/dueltest start` once. Confirm exactly one Greydwarf appears, a flag/bubble appear at the player, chat counts down from 10 to 0, and the server log contains one `Requesting one Greydwarf test proxy` line. Then execute `/dueltest cancel` and confirm the creature, flag, and bubble are removed. No PvP behavior is verified by this test; pair-only combat remains unimplemented, and no PvP override may activate before countdown reaches zero.
+> **Next required smoke test:** with the isolated server and the r2modman `Holmgang-TEST` profile running the same build, execute `/dueltest start` once. Confirm: no creature spawns; a flag and bubble appear at the player; chat counts down from 5 to 0. Then run `/dueltest damage 0` before the countdown ends and confirm it is refused as protected with health unchanged; run it again after the countdown and confirm the duel ends with the caller as winner and the flag and bubble are removed. Finally confirm a second `/dueltest start` succeeds without `/dueltest cancel`. Record the observations here before claiming verification. No PvP behavior is verified by this test; pair-only combat remains unimplemented, and no PvP override may activate before countdown reaches zero.
 
 - [ ] Complete and runtime-verify Valheim adapters for proximity, countdown ticking, health threshold, disconnect/death/world cleanup, and boundary checks; the local player snapshot adapter and Unity update-loop wiring are implemented below but have not yet passed an in-game smoke test.
 - [x] Add the initial Valheim player-directory adapter using the installed build's `Player.GetAllPlayers()`, local-player identity, position, health, death, and world-name APIs; Release compilation against the dedicated-server assemblies passes. Network authority and live smoke verification remain pending.
 - [x] Implement the game-independent runtime coordinator for countdown activation, health threshold, radius exit, disconnect/death/world-transfer outcomes, and idempotent presentation cleanup; 4 coordinator tests pass.
 - [ ] Run the simulated opponent through the normal countdown, marker/bubble, radius, result, and cleanup paths.
-- [x] Implement the native Greydwarf combat proxy for admin test mode, including prefab lookup, temporary spawn, health/position polling, death detection through the runtime coordinator, and explicit cleanup; live in-game spawn/death verification remains pending.
+- [x] Replace the native Greydwarf proxy with a server-owned, non-networked `VirtualTestCombatant` for admin test mode: in-memory health and position, explicit damage events refused during countdown, and cleanup by the coordinator on every end path. Pure tests pass; live spawn-free verification remains pending.
 - [x] Add a server-authoritative `/dueltest` RPC/config gate that validates the sender identity and server admin list before executing test commands; live network smoke verification remains pending.
-- [ ] Ensure the test opponent is never a visible/networked Valheim `Player` entity and cannot be used as a duel damage source outside the test harness.
-- [ ] Add pair-only combat filtering and preservation/restoration of relevant pre-duel PvP state.
+- [ ] Ensure the test opponent is never a visible/networked Valheim `Player` entity and cannot be used as a duel damage source outside the test harness. Authored: the opponent is virtual (no Valheim object) and only `/dueltest damage` reaches it; live-unverified.
+- [ ] Add pair-only combat filtering and preservation/restoration of relevant pre-duel PvP state. Authored 2026-11-19: `DuelDamageRules` (Core, unit-tested) allows player damage only between the two participants of an Active duel and blocks any other player-vs-player damage to or from a duelist. `DuelDamageHooks` applies it through a Harmony prefix on `Player.Damage`. `DuelPvpState` enables PvP for the duelists at Active and restores each player's original setting on every end path. Player identity: every server-side path uses `PlayerIdentity.CanonicalId`, the platform user ID of the player's connection. It is matched through the character ZDO ID, and Valheim's character ID is used only as a logged fallback. The original PvP setting is written to a journal in the BepInEx config folder before PvP is enabled, so an interrupted server restores it when the player returns (not a world-save entry). Live-unverified: this needs two real players, and the Phase 0 interception spike is still open.
+- [x] Chat result announcement: `DuelResultText` (Core, unit-tested) builds "X won the duel against Y: reason." It prints to the local chat and is broadcast to clients with the end presentation. Live check pending for multiplayer.
 - [ ] Add temporary flag and optional bubble presentation with guaranteed cleanup.
 - [x] Implement compile-verified temporary center flag/totem and configurable translucent bubble presentation with an owner-controlled cleanup object; live visual smoke verification remains pending.
 - [ ] **Verify:** two-player and three-player runtime matrix passes, including unrelated-player damage isolation and all end paths.

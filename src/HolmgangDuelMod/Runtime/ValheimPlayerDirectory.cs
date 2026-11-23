@@ -31,7 +31,7 @@ internal sealed class ValheimPlayerDirectory : IPlayerDirectory, IRuntimePartici
             return false;
         }
 
-        stableId = Player.m_localPlayer.GetPlayerID().ToString();
+        stableId = PlayerIdentity.CanonicalId(Player.m_localPlayer);
         return true;
     }
 
@@ -42,7 +42,7 @@ internal sealed class ValheimPlayerDirectory : IPlayerDirectory, IRuntimePartici
         foreach (var player in Player.GetAllPlayers())
         {
             if (player is null) continue;
-            var stableId = player.GetPlayerID().ToString();
+            var stableId = PlayerIdentity.CanonicalId(player);
             if (!seen.Add(stableId)) continue;
             yield return new PlayerSnapshot(
                 stableId,
